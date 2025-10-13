@@ -1,0 +1,39 @@
+{
+  "name": "callcenter-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@floating-ui/dom": "^1.7.4",
+    "@headlessui/vue": "^1.7.23",
+    "@tanstack/vue-query": "^5.90.2",
+    "apexcharts": "^5.3.5",
+    "dayjs": "^1.11.18",
+    "ky": "^1.11.0",
+    "lucide-vue-next": "^0.545.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.22",
+    "vue-router": "^4.5.1",
+    "vue3-apexcharts": "^1.9.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^24.6.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/eslint-config-typescript": "^14.6.0",
+    "@vue/tsconfig": "^0.8.1",
+    "eslint": "^9.37.0",
+    "eslint-plugin-vue": "^10.5.0",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7",
+    "vue-tsc": "^3.1.0"
+  }
+}
