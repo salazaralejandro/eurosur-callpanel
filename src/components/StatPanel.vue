@@ -1,59 +1,81 @@
 <script setup lang="ts">
+import { computed, defineProps } from 'vue'
 import type { Component } from 'vue'
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   title: string
-  value?: number | string
-  hint?: string
+  value: number | string | null | undefined
   loading?: boolean
-  icon: Component          // p.ej. PhoneIncoming de lucide-vue-next
-  delta?: number | null    // variación (ej. +5, -2). Si no hay, no se muestra
-  deltaLabel?: string      // “vs. ayer”, “últ. 30 min”, etc.
-  positiveIsGood?: boolean // por defecto true: verde si delta>0
-}>(), {
-  loading: false,
-  delta: null,
-  deltaLabel: '',
-  positiveIsGood: true,
+  hint?: string
+  icon?: Component
+  delta?: number | null
+  deltaLabel?: string
+  positiveIsGood?: boolean
+  size?: 'default' | 'tv'
+}>()
+
+const size = computed(() => props.size ?? 'default')
+
+const numberClass = computed(() =>
+  size.value === 'tv'
+    ? 'text-[clamp(3rem,10vw,10rem)]'
+    : 'text-[clamp(2.5rem,6vw,5rem)]'
+)
+
+const trend = computed(() => {
+  if (props.delta == null) return null
+  if (props.delta === 0) return 'neutral'
+  const good = props.positiveIsGood ?? true
+  const positive = props.delta > 0
+  return positive === good ? 'good' : 'bad'
 })
 
-const fmt = (v?: number | string) => v ?? '—'
-const deltaClass = () => {
-  if (props.delta == null) return ''
-  const up = props.delta > 0
-  const good = props.positiveIsGood ? up : !up
-  return good ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
-              : 'text-red-600 bg-red-50 border-red-200'
-}
+const chipClass = computed(() => {
+  if (!trend.value) return 'bg-white/10 text-white/70 dark:bg-white/10 dark:text-white/70'
+  if (trend.value === 'good') return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+  return 'bg-red-500/15 text-red-600 dark:text-red-300'
+})
+
+const displayValue = computed(() => (props.loading ? '–' : props.value ?? '–'))
 </script>
 
 <template>
-  <section
-    class="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"
-    role="status"
-    aria-live="polite"
+  <div
+    class="rounded-[1.2vw] ring-1 p-[1.6vw]
+           bg-white ring-neutral-200 shadow-sm
+           dark:bg-white/5 dark:ring-white/10"
   >
-    <div class="flex items-center gap-3">
-      <div class="grid h-10 w-10 place-items-center rounded-xl border border-neutral-200 bg-neutral-50">
-        <component :is="icon" class="h-5 w-5 text-neutral-700" aria-hidden="true" />
+    <div class="flex items-center justify-between mb-[0.8vw]">
+      <div class="flex items-center gap-[0.6vw]">
+        <div class="rounded-[0.8vw] bg-[#0261F4]/20 p-[0.7vw]">
+          <component v-if="icon" :is="icon" class="h-[1.6vw] w-[1.6vw] text-[#0261F4]" />
+        </div>
+        <h3 class="text-[1vw] font-medium text-neutral-900 dark:text-white/80">
+          {{ title }}
+        </h3>
       </div>
-      <div class="min-w-0">
-        <h3 class="truncate text-sm font-medium text-neutral-600">{{ title }}</h3>
-        <p v-if="hint" class="text-xs text-neutral-400">{{ hint }}</p>
-      </div>
-      <div class="ml-auto text-3xl font-semibold tabular-nums tracking-tight">
-        <span v-if="!loading">{{ fmt(value) }}</span>
-        <span v-else class="inline-block animate-pulse">···</span>
-      </div>
-    </div>
 
-    <div v-if="delta !== null" class="mt-3">
-      <span class="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs"
-            :class="deltaClass()">
-        <span>{{ delta > 0 ? '▲' : (delta < 0 ? '▼' : '•') }}</span>
-        <span>{{ delta }}</span>
-        <span v-if="deltaLabel" class="text-neutral-500">· {{ deltaLabel }}</span>
+      <span v-if="delta != null"
+        class="text-[0.85vw] px-[0.6vw] py-[0.25vw] rounded-full select-none"
+        :class="chipClass"
+      >
+        {{ delta > 0 ? `+${delta}` : `${delta}` }}
+        <template v-if="deltaLabel"> · {{ deltaLabel }}</template>
       </span>
     </div>
-  </section>
+
+    <div class="leading-none tracking-tight">
+      <span class="block font-bold tabular-nums" :class="numberClass">
+        {{ displayValue }}
+      </span>
+    </div>
+
+    <p v-if="hint" class="mt-[0.6vw] text-[0.95vw] text-neutral-500 dark:text-white/60">
+      {{ hint }}
+    </p>
+  </div>
 </template>
+
+<style scoped>
+.tabular-nums { font-variant-numeric: tabular-nums; }
+</style>

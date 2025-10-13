@@ -1,187 +1,113 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { TrendingUp } from 'lucide-vue-next'
+import { onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import VueApexCharts from 'vue3-apexcharts'
 
-const props = withDefaults(defineProps<{
+defineProps<{
   title: string
+  subtitle?: string
   labels: string[]
   series: number[]
   height?: number
-  subtitle?: string
-}>(), { height: 280, subtitle: '' })
+}>()
 
-const total = computed(() => props.series.reduce((a, b) => a + b, 0))
+const apexRef = ref<InstanceType<typeof VueApexCharts> | null>(null)
+const isDark = ref<boolean>(document.documentElement.classList.contains('dark'))
+let mo: MutationObserver | null = null
 
-// Calcular porcentajes
-const percentages = computed(() => 
-  props.series.map(value => total.value > 0 ? Math.round((value / total.value) * 100) : 0)
-)
+onMounted(() => {
+  mo = new MutationObserver(() => {
+    const nowDark = document.documentElement.classList.contains('dark')
+    if (nowDark !== isDark.value) {
+      isDark.value = nowDark
+      updateTheme()
+    }
+  })
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+})
 
-const options = computed(() => ({
-  chart: {
-    type: 'donut',
-    toolbar: { show: false },
-    animations: { 
-      enabled: true,
-      easing: 'easeinout', 
-      speed: 400,
-      animateGradually: { enabled: true, delay: 150 },
-      dynamicAnimation: { enabled: true, speed: 350 }
+onBeforeUnmount(() => { mo?.disconnect() })
+
+const state = reactive({
+  options: {
+    chart: {
+      type: 'donut',
+      background: 'transparent',
+      toolbar: { show: false }
     },
-    fontFamily: 'Inter, ui-sans-serif, system-ui',
-  },
-  colors: ['#0261F4', '#60A5FA', '#93C5FD', '#DBEAFE'],
-  labels: props.labels,
-  legend: {
-    show: false,
-  },
-  dataLabels: {
-    enabled: false,
-    dropShadow: { enabled: false },
-  },
-  stroke: { 
-    width: 2,
-    colors: ['#ffffff']
-  },
-  grid: { padding: { top: 0, right: 0, bottom: 0, left: 0 } },
-  plotOptions: {
-    pie: {
-      expandOnClick: false,
-      donut: {
-        size: '75%',
-        background: 'transparent',
-        labels: {
-          show: true,
-          name: { 
-            show: true, 
-            offsetY: 20, 
-            color: '#6B7280', 
-            fontSize: '13px',
-            fontWeight: 500
-          },
-          value: {
+    theme: { mode: isDark.value ? 'dark' : 'light' },
+    labels: [] as string[],
+    legend: {
+      position: 'right',
+      fontSize: '16px',
+      labels: { colors: undefined },
+      markers: { radius: 12 },
+      itemMargin: { vertical: 8 }
+    },
+    dataLabels: {
+      enabled: true,
+      formatter: (val: number) => `${Math.round(val)}%`,
+      style: { fontSize: '16px' }
+    },
+    plotOptions: {
+      pie: {
+        donut: {
+          size: '65%',
+          labels: {
             show: true,
-            fontSize: '32px',
-            fontWeight: 700,
-            color: '#0261F4',
-            offsetY: -10,
-            formatter: (v: string) => v
-          },
-          total: {
-            show: true,
-            label: props.subtitle || 'Total',
-            fontSize: '13px',
-            color: '#6B7280',
-            fontWeight: 500,
-            formatter: () => String(total.value)
+            name: { show: true, fontSize: '18px' },
+            value: { show: true, fontSize: '28px', formatter: (v: string) => v },
+            total: {
+              show: true,
+              label: 'Total',
+              fontSize: '16px',
+              formatter: (w: any) => {
+                const s = w.globals.seriesTotals?.reduce((a: number, b: number) => a + b, 0) || 0
+                return String(s)
+              }
+            }
           }
         }
       }
-    }
-  },
-  tooltip: {
-    theme: 'light',
-    style: {
-      fontSize: '13px',
-      fontFamily: 'Inter, ui-sans-serif, system-ui'
     },
-    y: {
-      formatter: (val: number) => `${val} llamadas`
+    colors: ['#0261F4', '#A3A3A3', '#10B981', '#F59E0B'],
+    stroke: { width: 2 }
+  } as any,
+  seriesInternal: [] as number[]
+})
+
+const updateTheme = () => {
+  state.options = {
+    ...state.options,
+    theme: { mode: isDark.value ? 'dark' : 'light' },
+    legend: {
+      ...state.options.legend,
+      labels: { colors: isDark.value ? '#E5E7EB' : '#374151' }
     }
-  },
-  states: {
-    hover: {
-      filter: {
-        type: 'darken',
-        value: 0.15,
-      }
-    },
-    active: {
-      filter: {
-        type: 'none',
-      }
-    }
-  },
-  responsive: [
-    { 
-      breakpoint: 640, 
-      options: { 
-        plotOptions: { 
-          pie: { 
-            donut: { 
-              size: '70%',
-              labels: {
-                value: { fontSize: '28px' }
-              }
-            } 
-          } 
-        },
-        dataLabels: { enabled: false } 
-      } 
-    }
-  ]
-}))
+  }
+}
+
+watch(isDark, updateTheme, { immediate: true })
 </script>
 
 <template>
-  <section class="group rounded-xl border border-neutral-200 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-neutral-300">
-    <!-- Header -->
-    <div class="mb-1 flex items-start justify-between">
-      <div class="flex-1">
-        <h3 class="text-base font-semibold text-neutral-900">{{ title }}</h3>
-        <p v-if="subtitle" class="text-sm text-neutral-500 mt-0.5">{{ subtitle }}</p>
-      </div>
-      <div class="rounded-lg bg-[#0261F4]/10 p-2 transition-colors duration-200 group-hover:bg-[#0261F4]/15">
-        <TrendingUp class="h-5 w-5 text-[#0261F4]" aria-hidden="true" />
-      </div>
-    </div>
-
-    <!-- Gráfico -->
-    <div class="my-4">
-      <apexchart
-        type="donut"
-        :height="height"
-        :options="options"
-        :series="series"
-        aria-label="Gráfico de distribución de llamadas"
-      />
-    </div>
-
-    <!-- Leyenda mejorada -->
-    <div class="space-y-3 pt-4 border-t border-neutral-100">
-      <div 
-        v-for="(label, i) in labels" 
-        :key="label" 
-        class="flex items-center justify-between gap-3 group/item"
-      >
-        <div class="flex items-center gap-2.5 flex-1 min-w-0">
-          <span 
-            class="h-3 w-3 rounded-full flex-shrink-0 ring-2 ring-offset-1 transition-all duration-200 group-hover/item:ring-offset-2" 
-            :style="{ 
-              background: options.colors[i],
-              ringColor: options.colors[i] + '40'
-            }"
-          ></span>
-          <span class="text-sm text-neutral-700 font-medium truncate">{{ label }}</span>
-        </div>
-        <div class="flex items-center gap-3 flex-shrink-0">
-          <span class="text-sm font-semibold text-neutral-900 tabular-nums">{{ series[i] }}</span>
-          <span 
-            class="text-xs font-medium tabular-nums px-2 py-0.5 rounded-full"
-            :style="{ 
-              background: options.colors[i] + '15',
-              color: options.colors[i]
-            }"
-          >
-            {{ percentages[i] }}%
-          </span>
-        </div>
+  <div
+    class="rounded-[1.2vw] ring-1 p-[1.2vw]
+           bg-white ring-neutral-200 shadow-sm
+           dark:bg-white/5 dark:ring-white/10"
+  >
+    <div class="flex items-baseline justify-between mb-[0.8vw]">
+      <div>
+        <h3 class="text-[1.2vw] font-semibold text-neutral-900 dark:text-white">{{ title }}</h3>
+        <p v-if="subtitle" class="text-[0.95vw] text-neutral-500 dark:text-white/60">{{ subtitle }}</p>
       </div>
     </div>
 
-    <!-- Barra decorativa en hover -->
-    <div class="absolute bottom-0 left-0 right-0 h-1 rounded-b-xl overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity">
-      <div class="h-full bg-gradient-to-r from-[#0261F4]/20 via-[#0261F4]/40 to-[#0261F4]/20"></div>
-    </div>
-  </section>
+    <VueApexCharts
+      ref="apexRef"
+      type="donut"
+      :options="{ ...state.options, labels }"
+      :series="series"
+      :height="height ?? 420"
+    />
+  </div>
 </template>
