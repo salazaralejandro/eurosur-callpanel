@@ -1,16 +1,16 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ],
   "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "jsx": "preserve",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@store/*": ["src/store/*"],
-      "@pages/*": ["src/pages/*"],
-      "@utils/*": ["src/utils/*"]
-  }
-}
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
 }
