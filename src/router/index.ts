@@ -1,25 +1,21 @@
+// src/router/index.ts (ejemplo)
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { useAuthStore } from '@/store/auth'
+import { useAuth } from '@/features/auth/useAuth'
 
-const Login = () => import('@/pages/Login.vue')
-const Dashboard = () => import('@/pages/Dashboard.vue')
+const routes = [
+  { path: '/login', component: () => import('@/pages/Login.vue') },
+  { path: '/', component: () => import('@/pages/Dashboard.vue'), meta: { requiresAuth: true } },
+]
 
-const router = createRouter({
-  history: createWebHistory(),
-  routes: [
-    { path: '/login', name: 'login', component: Login, meta: { public: true } },
-    { path: '/', name: 'dashboard', component: Dashboard, meta: { requiresAuth: true } },
-  ],
-})
+const router = createRouter({ history: createWebHistory(), routes })
 
-router.beforeEach(async (to) => {
-  const auth = useAuthStore()
-  if (!auth.initialized) await auth.bootstrap() // intenta /api/me
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+router.beforeEach(async (to, _from, next) => {
+  const { isAuthenticated, REQUIRE_LOGIN } = useAuth()
+  if (to.meta.requiresAuth && REQUIRE_LOGIN) {
+    if (!isAuthenticated.value) return next('/login')
   }
-  if (to.name === 'login' && auth.isAuthenticated) return { name: 'dashboard' }
+  next()
 })
 
 export default router

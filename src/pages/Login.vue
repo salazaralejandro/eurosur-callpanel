@@ -1,26 +1,64 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useAuthStore } from '@/store/auth'
+import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowRight, AlertCircle } from 'lucide-vue-next'
+import { useAuth } from '@/features/auth/useAuth'
 
+const router = useRouter()
+const route = useRoute()
+const { login } = useAuth()
+
+// ENV flags (build-time)
+const AUTH_MODE = (import.meta.env.VITE_AUTH_MODE as 'disabled'|'mock'|'real') || 'disabled'
+const REQUIRE_LOGIN = import.meta.env.VITE_REQUIRE_LOGIN === '1'
+
+// UI state
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const loading = ref(false)
-const error = ref<string | null>(null)
+const errorMsg = ref<string | null>(null)
 
-const auth = useAuthStore()
-const route = useRoute()
-const router = useRouter()
+// Mostrar botón de demo si el modo no es "real" o no se requiere login
+const showDemoButton = computed(() => AUTH_MODE !== 'real' || !REQUIRE_LOGIN)
 
-const onSubmit = async () => {
+// Helpers
+function validate(): string | null {
+  if (!email.value.trim()) return 'El correo es obligatorio.'
+  // validación simple de email
+  if (!/^\S+@\S+\.\S+$/.test(email.value)) return 'Introduce un correo válido.'
+  if (!password.value.trim()) return 'La contraseña es obligatoria.'
+  return null
+}
+
+async function onSubmit() {
+  errorMsg.value = null
+  const v = validate()
+  if (v) {
+    errorMsg.value = v
+    return
+  }
   loading.value = true
-  error.value = null
   try {
-    await auth.login(email.value, password.value)
-    router.push((route.query.redirect as string) || '/')
-  } catch {
-    error.value = 'Credenciales inválidas'
+    await login(email.value.trim(), password.value)
+    const redirect = (route.query.redirect as string) || '/'
+    router.replace(redirect)
+  } catch (err: any) {
+    errorMsg.value = err?.message || 'No se pudo iniciar sesión.'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function enterDemo() {
+  errorMsg.value = null
+  loading.value = true
+  try {
+    // Cualquier credencial “dummy” servirá en modos disabled/mock
+    await login('demo@eurosur.com', 'demo')
+    const redirect = (route.query.redirect as string) || '/'
+    router.replace(redirect)
+  } catch (err: any) {
+    errorMsg.value = err?.message || 'No se pudo iniciar el modo demo.'
   } finally {
     loading.value = false
   }
@@ -28,154 +66,122 @@ const onSubmit = async () => {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-white flex">
-    <!-- Panel izquierdo - Branding -->
-    <div class="hidden lg:flex lg:flex-1 bg-gradient-to-br from-[#0261F4] to-[#0251D4] relative overflow-hidden">
-      <!-- Patrón decorativo -->
-      <div class="absolute inset-0 opacity-10">
-        <div class="absolute top-20 left-20 w-72 h-72 bg-white rounded-full blur-3xl"></div>
-        <div class="absolute bottom-20 right-20 w-96 h-96 bg-white rounded-full blur-3xl"></div>
-      </div>
-      
-      <!-- Contenido -->
-      <div class="relative z-10 flex flex-col justify-between p-12 text-white">
-        <div>
-          <img src="/eurosur-logo.svg" alt="Grupo Eurosur" class="h-10 w-auto brightness-0 invert" />
-        </div>
-        
-        <div class="max-w-md">
-          <h2 class="text-4xl font-bold mb-4">
-            Panel de llamadas
-          </h2>
-          <p class="text-lg text-blue-100">
-            Gestiona y monitorea todas las llamadas de tu equipo en tiempo real con métricas actualizadas.
-          </p>
-        </div>
-        
-        <div class="text-sm text-blue-100">
-          © 2025 Grupo Eurosur. Todos los derechos reservados.
-        </div>
-      </div>
-    </div>
+  <div class="min-h-dvh grid md:grid-cols-2">
+    <!-- LADO IZQUIERDO (branding) -->
+    <aside
+      class="hidden md:flex flex-col justify-between p-8 text-white"
+      style="background: radial-gradient(120% 120% at 0% 0%, #2B7BFF 0%, #0261F4 45%, #0B2C67 100%);"
+    >
+      <header class="flex items-center gap-3">
+        <img src="/eurosur-logo.svg" alt="Grupo Eurosur" class="h-8 w-auto" />
+      </header>
 
-    <!-- Panel derecho - Formulario -->
-    <div class="flex-1 flex items-center justify-center p-8 lg:p-12">
+      <div class="max-w-md">
+        <h1 class="text-3xl font-semibold leading-tight">Panel de llamadas</h1>
+        <p class="mt-3 text-white/85">
+          Gestiona y monitorea todas las llamadas de tu equipo en tiempo real con métricas actualizadas.
+        </p>
+      </div>
+
+      <footer class="text-sm text-white/70">
+        © 2025 Grupo Eurosur. Todos los derechos reservados.
+      </footer>
+    </aside>
+
+    <!-- LADO DERECHO (formulario) -->
+    <main class="flex items-center justify-center p-6 md:p-10">
       <div class="w-full max-w-md">
-        <!-- Logo móvil -->
-        <div class="lg:hidden mb-8 flex justify-center">
-          <img src="/eurosur-logo.svg" alt="Grupo Eurosur" class="h-8 w-auto" />
-        </div>
-
-        <!-- Header -->
         <div class="mb-8">
-          <h1 class="text-3xl font-bold text-neutral-900 mb-2">
-            Iniciar sesión
-          </h1>
-          <p class="text-neutral-600">
+          <h2 class="text-2xl font-semibold tracking-tight">Iniciar sesión</h2>
+          <p class="mt-2 text-sm text-neutral-500">
             Accede a tu panel de control
           </p>
         </div>
 
-        <!-- Alert de error -->
-        <div
-          v-if="error"
-          role="alert"
-          class="mb-6 flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 p-4"
-        >
-          <AlertCircle class="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <div class="flex-1">
-            <p class="text-sm font-medium text-red-900">Error de autenticación</p>
-            <p class="text-sm text-red-700 mt-1">{{ error }}</p>
-          </div>
-        </div>
-
-        <!-- Formulario -->
-        <form @submit.prevent="onSubmit" class="space-y-6" aria-label="Formulario de acceso">
-          <!-- Email -->
-          <div>
-            <label for="email" class="block text-sm font-medium text-neutral-900 mb-2">
-              Correo electrónico
-            </label>
+        <form class="space-y-4" @submit.prevent="onSubmit" novalidate>
+          <!-- Correo -->
+          <div class="space-y-1.5">
+            <label for="email" class="block text-sm font-medium">Correo electrónico</label>
             <input
               id="email"
               v-model="email"
               type="email"
-              required
-              autocomplete="email"
-              class="w-full rounded-lg border-2 border-neutral-200 bg-white px-4 py-3 text-neutral-900
-                     outline-none transition-colors duration-200
-                     placeholder:text-neutral-400
-                     hover:border-neutral-300
-                     focus:border-[#0261F4] focus:ring-4 focus:ring-[#0261F4]/10
-                     disabled:bg-neutral-50 disabled:cursor-not-allowed"
+              inputmode="email"
+              autocomplete="username"
               placeholder="nombre@eurosur.com"
+              class="w-full rounded-xl border border-neutral-300 px-3 py-2 outline-none focus:ring-2 focus:ring-[#0261F4] focus:border-[#0261F4]"
               :disabled="loading"
             />
           </div>
 
-          <!-- Password -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label for="password" class="block text-sm font-medium text-neutral-900">
-                Contraseña
-              </label>
-              <button 
+          <!-- Contraseña -->
+          <div class="space-y-1.5">
+            <label for="password" class="block text-sm font-medium">Contraseña</label>
+            <div class="relative">
+              <input
+                id="password"
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+                placeholder="Ingresa tu contraseña"
+                class="w-full rounded-xl border border-neutral-300 px-3 py-2 pr-10 outline-none focus:ring-2 focus:ring-[#0261F4] focus:border-[#0261F4]"
+                :disabled="loading"
+              />
+              <button
                 type="button"
-                class="text-sm text-[#0261F4] hover:text-[#0251D4] font-medium transition-colors"
-                disabled
+                class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-sm text-neutral-500 hover:text-neutral-800"
+                @click="showPassword = !showPassword"
+                :aria-pressed="showPassword"
+                :disabled="loading"
               >
-                ¿Olvidaste tu contraseña?
+                {{ showPassword ? 'Ocultar' : 'Ver' }}
               </button>
             </div>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              required
-              autocomplete="current-password"
-              class="w-full rounded-lg border-2 border-neutral-200 bg-white px-4 py-3 text-neutral-900
-                     outline-none transition-colors duration-200
-                     placeholder:text-neutral-400
-                     hover:border-neutral-300
-                     focus:border-[#0261F4] focus:ring-4 focus:ring-[#0261F4]/10
-                     disabled:bg-neutral-50 disabled:cursor-not-allowed"
-              placeholder="Ingresa tu contraseña"
-              :disabled="loading"
-            />
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-neutral-400">¿Olvidaste tu contraseña?</span>
+            </div>
           </div>
 
-          <!-- Submit button -->
+          <!-- Error -->
+          <p v-if="errorMsg" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+            {{ errorMsg }}
+          </p>
+
+          <!-- Botón iniciar sesión -->
           <button
             type="submit"
+            class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0261F4] px-4 py-2.5 font-semibold text-white transition-colors hover:bg-[#0251D4] disabled:opacity-60"
             :disabled="loading"
-            class="group w-full rounded-lg bg-[#0261F4] px-6 py-3.5 text-base font-semibold text-white
-                   transition-all duration-200 flex items-center justify-center gap-2
-                   hover:bg-[#0251D4] hover:shadow-xl hover:shadow-[#0261F4]/20
-                   focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0261F4]/20
-                   disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#0261F4] disabled:hover:shadow-none
-                   active:scale-[0.98]"
           >
-            <span v-if="loading" class="flex items-center gap-2">
-              <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Verificando credenciales...
-            </span>
-            <template v-else>
-              <span>Iniciar sesión</span>
-              <ArrowRight class="h-5 w-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-            </template>
+            <span v-if="!loading">Iniciar sesión</span>
+            <span v-else>Cargando…</span>
           </button>
         </form>
 
-        <!-- Footer info -->
-        <div class="mt-8 pt-6 border-t border-neutral-200">
-          <p class="text-sm text-neutral-500 text-center">
-            Acceso exclusivo para personal autorizado de Grupo Eurosur
-          </p>
+        <!-- Divider -->
+        <div class="my-6 flex items-center gap-3">
+          <div class="h-px flex-1 bg-neutral-200"></div>
+          <span class="text-xs text-neutral-400">o</span>
+          <div class="h-px flex-1 bg-neutral-200"></div>
         </div>
+
+        <!-- Botón Demo / Bypass -->
+        <button
+          v-if="showDemoButton"
+          type="button"
+          @click="enterDemo"
+          class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60"
+          :disabled="loading"
+          title="Entrar sin autenticar (modo demo)"
+        >
+          Entrar en modo demo
+        </button>
+
+        <!-- Nota de acceso -->
+        <p class="mt-6 text-center text-xs text-neutral-400">
+          Acceso exclusivo para personal autorizado de Grupo Eurosur.
+        </p>
       </div>
-    </div>
+    </main>
   </div>
 </template>
