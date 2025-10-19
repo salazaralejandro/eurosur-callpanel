@@ -13,8 +13,7 @@ import {
   BarElement,
   CategoryScale,
   LinearScale,
-  type ChartOptions,
-  type ChartData
+  type ChartOptions
 } from 'chart.js'
 
 // Registrar los módulos necesarios de Chart.js
@@ -89,8 +88,7 @@ const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTA
 
 
 /** === OPCIONES DE GRÁFICO CHART.JS === */
-// CORRECCIÓN: Tipar explícitamente el objeto de opciones
-const chartOptions = computed<ChartOptions<'bar'>>(() => ({
+const chartOptions: ChartOptions<'bar'> = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -99,7 +97,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
     },
     tooltip: {
       callbacks: {
-        label: function(context) {
+        label: function(context: any) {
           return `${context.dataset.label}: ${context.parsed.y} L`;
         }
       }
@@ -113,43 +111,28 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
         text: 'Litros',
         color: '#6b7280',
         font: {
-          weight: 500
+          weight: '500'
         }
       },
-      ticks: { 
-        color: '#6b7280',
-        callback: function(value) {
-          return value + ' L';
-        }
-      },
+      ticks: { color: '#6b7280' },
       grid: {
         color: '#e5e7eb',
-        drawBorder: false
+        borderDash: [4, 4]
       }
     },
     x: {
-      ticks: { 
-        color: '#6b7280',
-        maxRotation: 45,
-        minRotation: 45
-      },
-      grid: { 
-        display: false,
-        drawBorder: false
-      },
+      ticks: { color: '#6b7280' },
+      grid: { display: false },
     },
   },
-}))
+};
 
-const chartData = computed<ChartData<'bar'>>(() => {
+const chartData = computed(() => {
   const hourlyTotals: number[] = Array(24).fill(0)
-  
-  if (items.value && items.value.length > 0) {
-    for (const suministro of items.value) {
-      const hour = dayjs(suministro.fecha_hora).hour()
-      if (hour >= 0 && hour <= 23) {
-        hourlyTotals[hour] += suministro.litros
-      }
+  for (const suministro of items.value) {
+    const hour = dayjs(suministro.fecha_hora).hour()
+    if (hour >= 0 && hour <= 23) {
+      hourlyTotals[hour] += suministro.litros
     }
   }
 
@@ -161,8 +144,6 @@ const chartData = computed<ChartData<'bar'>>(() => {
         data: hourlyTotals,
         backgroundColor: '#0261F4',
         borderRadius: 4,
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
       },
     ],
   }
@@ -179,7 +160,7 @@ const chartData = computed<ChartData<'bar'>>(() => {
           <p class="text-sm text-slate-500">Vista general de suministros y estado de depósitos.</p>
         </div>
         <div class="flex items-center gap-2">
-          <input type="date" v-model="selectedDate" :max="today"
+           <input type="date" v-model="selectedDate" :max="today"
             class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <button @click="setHoy" :disabled="isToday"
             class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-60">
@@ -189,28 +170,28 @@ const chartData = computed<ChartData<'bar'>>(() => {
             class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
             Ayer
           </button>
-          <button @click="() => refetch()" :disabled="isFetching"
-            class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
-            <RefreshCcw :class="['h-4 w-4', isFetching ? 'animate-spin' : '']" />
-          </button>
+           <button @click="() => refetch()" :disabled="isFetching"
+          class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
+          <RefreshCcw :class="['h-4 w-4', isFetching ? 'animate-spin' : '']" />
+        </button>
         </div>
       </header>
       
       <div class="space-y-6">
 
         <section v-if="criticalDeposits.length > 0" class="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm">
-          <div class="flex items-center gap-3">
-            <div class="text-red-600"><TriangleAlert class="h-6 w-6"/></div>
-            <h2 class="text-lg font-semibold text-red-800">Alertas Críticas</h2>
-          </div>
-          <ul class="mt-3 space-y-2">
-            <li v-for="deposito in criticalDeposits" :key="deposito.ID_DEPOSITO" class="text-sm text-red-700 font-medium">
-              · El depósito <span class="font-bold">{{ deposito.NOMBRE }}</span> está al {{ deposito.PORCENTAJE }}%.
-            </li>
-          </ul>
-        </section>
+            <div class="flex items-center gap-3">
+               <div class="text-red-600"><TriangleAlert class="h-6 w-6"/></div>
+               <h2 class="text-lg font-semibold text-red-800">Alertas Críticas</h2>
+            </div>
+            <ul class="mt-3 space-y-2">
+              <li v-for="deposito in criticalDeposits" :key="deposito.ID_DEPOSITO" class="text-sm text-red-700 font-medium">
+                · El depósito <span class="font-bold">{{ deposito.NOMBRE }}</span> está al {{ deposito.PORCENTAJE }}%.
+              </li>
+            </ul>
+          </section>
 
-        <section class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+         <section class="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm flex items-start gap-4">
             <div class="bg-blue-100 text-blue-600 rounded-lg p-3"> <Droplets class="h-6 w-6"/> </div>
             <div>
@@ -221,8 +202,8 @@ const chartData = computed<ChartData<'bar'>>(() => {
             </div>
           </div>
           <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm flex items-start gap-4">
-            <div class="bg-blue-100 text-blue-600 rounded-lg p-3"> <Truck class="h-6 w-6"/> </div>
-            <div>
+             <div class="bg-blue-100 text-blue-600 rounded-lg p-3"> <Truck class="h-6 w-6"/> </div>
+             <div>
               <div class="text-sm font-medium text-slate-500">Operaciones</div>
               <div class="text-2xl font-bold text-slate-900 mt-1">
                 {{ operacionesFmt }}
@@ -244,7 +225,13 @@ const chartData = computed<ChartData<'bar'>>(() => {
           <header class="p-4 border-b border-slate-200">
             <h2 class="text-base font-semibold text-slate-800">Estado de Depósitos</h2>
           </header>
-          <div v-if="isLoadingDepositos" class="p-6 text-center text-slate-500 text-sm">Cargando...</div>
+          <!-- INICIO DE CAMBIOS -->
+          <div v-if="isLoadingDepositos" class="p-6 text-center text-slate-500 text-sm">
+            Cargando datos de depósitos...
+          </div>
+          <div v-else-if="!depositos || depositos.length === 0" class="p-6 text-center text-slate-500 text-sm">
+            Datos de depósitos no disponibles.
+          </div>
           <div v-else class="p-4 space-y-4">
             <div v-for="deposito in depositos" :key="deposito.ID_DEPOSITO">
               <div class="flex justify-between items-center mb-1">
@@ -260,6 +247,7 @@ const chartData = computed<ChartData<'bar'>>(() => {
               </div>
             </div>
           </div>
+          <!-- FIN DE CAMBIOS -->
         </section>
 
         <section class="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -272,15 +260,10 @@ const chartData = computed<ChartData<'bar'>>(() => {
             <div v-if="isLoading" class="h-64 mb-6 flex items-center justify-center text-slate-500 text-lg">
               Cargando gráfico...
             </div>
-            <div v-else-if="!data || data.operaciones === 0" class="h-64 mb-6 flex items-center justify-center text-slate-500 text-lg">
-              No hay datos para mostrar
-            </div>
             <div v-else class="h-64 mb-6">
-              <!-- Componente Bar con datos y opciones tipados correctamente -->
-              <Bar :data="chartData" :options="chartOptions" />
+              <Bar :data="chartData" :options="{ ...chartOptions }" />
             </div>
-            <div class="flex justify-between items-center mb-4">
-              <h4 class="text-sm font-semibold text-slate-700">
+            <div class="flex justify-between items-center mb-4"> <h4 class="text-sm font-semibold text-slate-700">
                 Registros Individuales ({{ totalItems }})
               </h4>
               <div class="relative">
@@ -289,15 +272,12 @@ const chartData = computed<ChartData<'bar'>>(() => {
               </div>
             </div>
             
-            <div class="max-h-[400px] overflow-y-auto pr-2">
-              <div v-if="isLoading" class="p-6 text-center text-sm text-slate-500">Cargando...</div>
+            <div class="max-h-[400px] overflow-y-auto pr-2"> <div v-if="isLoading" class="p-6 text-center text-sm text-slate-500">Cargando...</div>
               <div v-else-if="filteredItems.length === 0" class="p-6 text-center text-sm text-slate-500">
                 {{ searchQuery ? 'No hay resultados para tu búsqueda.' : `Sin registros para el día ${selectedDate}.` }}
               </div>
-              <ul v-else class="space-y-2">
-                <li v-for="s in filteredItems" :key="s.id"
-                  class="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-50 transition-colors hover:bg-slate-100">
-                  <div class="min-w-0">
+              <ul v-else class="space-y-2"> <li v-for="s in filteredItems" :key="s.id"
+                  class="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-50 transition-colors hover:bg-slate-100"> <div class="min-w-0">
                     <div class="truncate text-sm font-medium text-slate-800">{{ s.vehiculo ?? 'Vehículo Desconocido' }}</div>
                     <div class="truncate text-xs text-slate-500">
                       {{ s.fecha_hora || '—' }} · Surtidor: {{ s.surtidor ?? '—' }}
@@ -310,12 +290,12 @@ const chartData = computed<ChartData<'bar'>>(() => {
                 </li>
               </ul>
             </div>
-          </div>
+            </div>
         </section>
 
       </div>
 
-      <footer class="mt-8 text-center text-xs text-slate-500">
+       <footer class="mt-8 text-center text-xs text-slate-500">
         El refresco automático está {{ isToday ? 'activado' : 'desactivado (fecha histórica)' }}
       </footer>
     </main>
@@ -327,3 +307,4 @@ const chartData = computed<ChartData<'bar'>>(() => {
   font-variant-numeric: tabular-nums;
 }
 </style>
+
