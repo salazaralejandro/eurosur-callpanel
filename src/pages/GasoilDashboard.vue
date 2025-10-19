@@ -2,27 +2,6 @@
 import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { RefreshCcw, Droplets, Truck, Gauge, Search, TriangleAlert } from 'lucide-vue-next'
-// --- INICIO CAMBIOS ECHARTS ---
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart } from 'echarts/charts'
-import {
-  GridComponent,
-  TooltipComponent,
-  TitleComponent,
-} from 'echarts/components'
-
-// Registrar los módulos de ECharts
-use([
-  CanvasRenderer,
-  BarChart,
-  GridComponent,
-  TooltipComponent,
-  TitleComponent,
-])
-// --- FIN CAMBIOS ECHARTS ---
-
 import { useSuministrosDia, type Suministro } from '@/features/gasoil/useSuministros'
 import { useDepositos, type EstadoDeposito } from '@/features/gasoil/useGasoil'
 
@@ -32,9 +11,6 @@ const selectedDate = ref<string>(today)
 const isToday = computed(() => selectedDate.value === today)
 
 /** === Datos Suministros === */
-// V--- CORRECCIÓN ---V
-// Volvemos a pasar el valor directamente para que coincida con el tipo (number)
-// que espera el hook 'useSuministrosDia'.
 const { data, isLoading, isFetching, refetch } = useSuministrosDia(selectedDate, isToday.value ? 60_000 : 0)
 
 /** === Datos Depósitos === */
@@ -91,72 +67,6 @@ const filteredItems = computed(() => {
 })
 const totalItems = computed(() => filteredItems.value.length)
 const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTAJE ?? 100) <= 10) ?? [])
-
-
-/** === OPCIONES DE GRÁFICO ECHARTS === */
-const chartOption = computed(() => {
-  
-  // 1. Calculamos los datos aquí dentro
-  const hourlyTotals: number[] = Array(24).fill(0)
-  for (const suministro of items.value) {
-    const hour = dayjs(suministro.fecha_hora).hour()
-    if (hour >= 0 && hour <= 23) {
-      hourlyTotals[hour] += suministro.litros
-    }
-  }
-
-  // 2. Retornamos el objeto de opciones
-  return {
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' }, // Sombra en la barra
-      formatter: (params: any) => {
-        const data = params[0]
-        return `${data.name}<br /><strong>${data.value} L</strong>`
-      }
-    },
-    xAxis: {
-      type: 'category',
-      data: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`),
-      axisLabel: { color: '#6b7280' },
-      axisLine: { show: false },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      name: 'Litros',
-      nameTextStyle: {
-        color: '#6b7280',
-        fontWeight: 500
-      },
-      axisLabel: { color: '#6b7280' },
-      splitLine: {
-        lineStyle: {
-          color: '#e5e7eb',
-          type: 'dashed'
-        }
-      }
-    },
-    series: [
-      {
-        name: 'Litros',
-        type: 'bar',
-        barWidth: '60%',
-        data: hourlyTotals,
-        itemStyle: {
-          color: '#0261F4',
-          borderRadius: [4, 4, 0, 0] // Borde redondeado solo arriba
-        }
-      }
-    ]
-  }
-})
 
 </script>
 
@@ -259,14 +169,14 @@ const chartOption = computed(() => {
             </h3>
           </header>
           <div class="p-4">
-            <div class="h-64 mb-6">
-              <VChart :option="chartOption" autoresize />
+            <div class="h-64 mb-6 flex items-center justify-center text-slate-500 text-lg">
+              Gráfico temporalmente desactivado.
             </div>
             <div class="flex justify-between items-center mb-4"> <h4 class="text-sm font-semibold text-slate-700">
                 Registros Individuales ({{ totalItems }})
               </h4>
               <div class="relative">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"/>
+                <Search class="absolute left-3 top-1/2 -translate-y-1-2 h-4 w-4 text-slate-400"/>
                 <input type="text" v-model="searchQuery" placeholder="Filtrar por vehículo..." class="pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg w-48 focus:ring-2 focus:ring-blue-500 focus:outline-none"/>
               </div>
             </div>
