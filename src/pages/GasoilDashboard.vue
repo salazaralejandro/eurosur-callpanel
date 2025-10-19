@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { RefreshCcw, Droplets, Truck, Gauge, Search, TriangleAlert } from 'lucide-vue-next'
 import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts' // <--- CORRECCIÓN 1: Importar tipo
 import { useSuministrosDia, type Suministro } from '@/features/gasoil/useSuministros'
 import { useDepositos, type EstadoDeposito } from '@/features/gasoil/useGasoil'
 
@@ -85,9 +86,10 @@ const chartSeries = computed(() => {
   }]
 })
 
-const chartOptions = computed(() => ({
+// <--- CORRECCIÓN 2: Tipar la propiedad computada
+const chartOptions = computed<ApexOptions>(() => ({
   chart: {
-    type: 'bar',
+    type: 'bar', // TypeScript ahora sabe que esto es del tipo 'bar'
     height: 250,
     toolbar: { show: false },
     fontFamily: 'Inter, sans-serif',
@@ -176,10 +178,11 @@ const chartOptions = computed(() => ({
             class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
             Ayer
           </button>
-           <button @click="refetch" :disabled="isFetching"
-          class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
-          <RefreshCcw :class="['h-4 w-4', isFetching ? 'animate-spin' : '']" />
-        </button>
+          
+           <button @click="() => refetch()" :disabled="isFetching"
+            class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
+            <RefreshCcw :class="['h-4 w-4', isFetching ? 'animate-spin' : '']" />
+           </button>
         </div>
       </header>
       

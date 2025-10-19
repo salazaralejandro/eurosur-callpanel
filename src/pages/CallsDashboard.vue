@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts' // <--- CORRECCIÓN 1: Importar tipo
 import { useCallsKpis } from '@/features/calls/useCalls'
 import { getGasogesApiStatus, getMundoSmsApiStatus } from '@/utils/api'
 import { RefreshCcw, Hourglass, PhoneCall, Users, TriangleAlert } from 'lucide-vue-next'
@@ -54,9 +55,10 @@ const chartSeries = computed(() => {
 })
 
 // CAMBIO: Opciones de gráfico adaptadas a MODO CLARO
-const chartOptions = computed(() => ({
+// <--- CORRECCIÓN 2: Tipar la propiedad computada
+const chartOptions = computed<ApexOptions>(() => ({
   chart: {
-    type: 'area',
+    type: 'area', // TypeScript ahora sabe que esto es del tipo 'area'
     height: 250,
     toolbar: { show: false },
     fontFamily: 'Inter, sans-serif',
