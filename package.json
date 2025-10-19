@@ -11,6 +11,8 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.4",
     "@headlessui/vue": "^1.7.23",
+    "@tanstack/query-core": "^5.90.5",
+    "@tanstack/vue-query": "^5.90.5",
     "apexcharts": "^5.3.5",
     "dayjs": "^1.11.18",
     "ky": "^1.11.0",
