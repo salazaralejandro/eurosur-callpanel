@@ -2,10 +2,9 @@
 import { computed, unref } from 'vue'
 
 import { gasogesApi } from '@/utils/api'
-import { useMocks } from '@/utils/mock'
 import { useQuery } from '@tanstack/vue-query'
 
-// Tipos mínimos (ajústalos si ya los tienes en ./schemas)
+/** === Tipos (ajusta si ya los tienes) === */
 export type EstadoDeposito = {
   ID_DEPOSITO: number
   NOMBRE: string
@@ -15,32 +14,10 @@ export type EstadoDeposito = {
   ULTIMO_SUMINISTRO: string | null
 }
 
-// Intervalo por defecto (5 min) — override con VITE_GASOIL_REFETCH_MS
+/** === Intervalo por defecto (5 min) — override con VITE_GASOIL_REFETCH_MS === */
 const DEFAULT_REFETCH_MS = Number(import.meta.env.VITE_GASOIL_REFETCH_MS ?? 300000)
 
-// Mock opcional si VITE_USE_MOCKS=1
-function mockDepositos(): EstadoDeposito[] {
-  return [
-    {
-      ID_DEPOSITO: 1,
-      NOMBRE: 'DEP 1',
-      CAPACIDAD: 5000,
-      LITROS_ACTUALES: 300,
-      PORCENTAJE: 6,
-      ULTIMO_SUMINISTRO: new Date().toISOString(),
-    },
-    {
-      ID_DEPOSITO: 2,
-      NOMBRE: 'DEP 2',
-      CAPACIDAD: 8000,
-      LITROS_ACTUALES: 5200,
-      PORCENTAJE: 65,
-      ULTIMO_SUMINISTRO: new Date().toISOString(),
-    },
-  ]
-}
-
-// Normaliza /depositos que puede devolver objetos, {data:[]}, o tuplas [id, nombre]
+/** === Normaliza /depositos que puede devolver formatos distintos === */
 function coerceDepositos(res: unknown): EstadoDeposito[] {
   // objetos completos
   if (Array.isArray(res) && res.length && typeof res[0] === 'object' && !Array.isArray(res[0])) {
@@ -65,34 +42,24 @@ function coerceDepositos(res: unknown): EstadoDeposito[] {
   return []
 }
 
-// useGasoil.ts
+/** === Hook principal: NO inventa datos, solo backend === */
 export function useDepositos(refetchMs = DEFAULT_REFETCH_MS) {
-  const mocks = useMocks()
-
   return useQuery({
     queryKey: ['depositos'],
     queryFn: async () => {
-      if (mocks) return mockDepositos()
-
-      const res = await gasogesApi.get('depositos').json<unknown>()
-
-      // Normalización
-      if (Array.isArray(res)) {
-        return res as EstadoDeposito[]
+      try {
+        const res = await gasogesApi.get('depositos').json<unknown>()
+        return coerceDepositos(res)
+      } catch (err) {
+        console.error('Error al cargar /depositos:', err)
+        return [] as EstadoDeposito[]
       }
-      if (res && typeof res === 'object' && Array.isArray((res as any).data)) {
-        return (res as any).data as EstadoDeposito[]
-      }
-
-      console.warn('Respuesta inesperada de /depositos:', res)
-      return [] as EstadoDeposito[]
     },
     staleTime: Math.floor(refetchMs * 0.5),
     refetchInterval: refetchMs,
     refetchIntervalInBackground: true,
   })
 }
-
 
 /** 🔁 Depósitos bajo nivel (<threshold) y críticos (<criticalThreshold) */
 export function useDepositosBajoNivel(
@@ -105,7 +72,9 @@ export function useDepositosBajoNivel(
   const depositosBajos = computed<EstadoDeposito[]>(() => {
     const depositos = unref(depositosRef) ?? []
     // Solo consideramos los que vienen con litros numéricos
-    return depositos.filter(d => Number.isFinite(Number(d.LITROS_ACTUALES)) && Number(d.LITROS_ACTUALES) < threshold)
+    return depositos.filter(
+      d => Number.isFinite(Number(d.LITROS_ACTUALES)) && Number(d.LITROS_ACTUALES) < threshold,
+    )
   })
 
   const criticalDeposits = computed<EstadoDeposito[]>(() =>
@@ -120,6 +89,4 @@ export function useDepositosBajoNivel(
     criticalDeposits,
     hasLowLevel,
   }
-
-  
 }

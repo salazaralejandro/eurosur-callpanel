@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { RefreshCcw, Droplets, Truck, Gauge, Search, TriangleAlert } from 'lucide-vue-next'
 
-// --- INICIO CHART.JS ---
+/* === Chart.js (barras por hora) === */
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -13,128 +13,97 @@ import {
   BarElement,
   CategoryScale,
   LinearScale,
-  type ChartOptions
+  type ChartOptions,
 } from 'chart.js'
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
-// --- FIN CHART.JS ---
 
+/* === Data hooks === */
 import { useSuministrosDia, type Suministro } from '@/features/gasoil/useSuministros'
 import { useDepositos, type EstadoDeposito } from '@/features/gasoil/useGasoil'
 
-/** === Fecha seleccionada === */
+/* === Fecha seleccionada === */
 const today = dayjs().format('YYYY-MM-DD')
 const selectedDate = ref<string>(today)
 const isToday = computed(() => selectedDate.value === today)
 
-/** === Datos Suministros === */
+/* === Suministros === */
 const { data, isLoading, isFetching, refetch } = useSuministrosDia(selectedDate, isToday.value ? 60_000 : 0)
 
-/** === Datos Depósitos === */
-const { data: depositos } = useDepositos()
+/* === Depósitos (sin mocks) === */
+const {
+  data: depositos,
+  isLoading: isLoadingDepositos,
+  isFetching: isFetchingDepositos,
+  error: depositosError,
+} = useDepositos()
 
-/** === Mostrar / ocultar depósitos === */
-const hasDepositosData = computed(
-  () => Array.isArray(depositos.value) && depositos.value.length > 0
-)
-
-/** === Ayudas de formato y estado === */
-const fmtNum = (n: number) =>
-  new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(n)
+/* === Helpers === */
+const fmtNum = (n: number) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(n)
 
 function getDepositoStatus(deposito: EstadoDeposito | null) {
-  const p = deposito?.PORCENTAJE ?? 0
-  if (!deposito) {
-    return { text: 'Sin datos', class: 'bg-neutral-100 text-neutral-800', colorClass: 'bg-neutral-500' }
+  const p = deposito?.PORCENTAJE ?? null
+  if (p == null || Number.isNaN(Number(p))) {
+    return { text: 'Sin datos', class: 'bg-neutral-100 text-neutral-800', colorClass: 'bg-neutral-400' }
   }
-  if (p > 20) {
-    return { text: 'Nivel OK', class: 'bg-emerald-100 text-emerald-800', colorClass: 'bg-emerald-500' }
-  }
-  if (p > 10) {
-    return { text: 'Nivel Bajo', class: 'bg-yellow-100 text-yellow-800', colorClass: 'bg-yellow-500' }
-  }
+  if (p > 20) return { text: 'Nivel OK', class: 'bg-emerald-100 text-emerald-800', colorClass: 'bg-emerald-500' }
+  if (p > 10) return { text: 'Nivel Bajo', class: 'bg-yellow-100 text-yellow-800', colorClass: 'bg-yellow-500' }
   return { text: 'Nivel Crítico', class: 'bg-red-100 text-red-800', colorClass: 'bg-red-500' }
 }
 
-/** === KPIs Computados (para limpiar template) === */
-const totalLitrosFmt = computed(() => {
-  if (isLoading.value || !data.value) return '–'
-  return `${fmtNum(data.value.totalLitros)} L`
-})
-const operacionesFmt = computed(() => {
-  if (isLoading.value || !data.value) return '–'
-  return data.value.operaciones
-})
-const promedioFmt = computed(() => {
-  if (isLoading.value || !data.value) return '–'
-  return `${fmtNum(data.value.promedio)} L`
-})
+/* === KPIs === */
+const totalLitrosFmt = computed(() => (isLoading.value || !data.value ? '–' : `${fmtNum(data.value.totalLitros)} L`))
+const operacionesFmt = computed(() => (isLoading.value || !data.value ? '–' : data.value.operaciones))
+const promedioFmt = computed(() => (isLoading.value || !data.value ? '–' : `${fmtNum(data.value.promedio)} L`))
 
-/** === Controles de fecha === */
+/* === Controles fecha === */
 const setHoy = () => (selectedDate.value = today)
 const setAyer = () => (selectedDate.value = dayjs().subtract(1, 'day').format('YYYY-MM-DD'))
 
-/** === Lógica de filtrado y alertas === */
+/* === Filtro & lista === */
 const searchQuery = ref('')
 const items = computed<Suministro[]>(() => data.value?.items ?? [])
 const filteredItems = computed(() => {
   if (!searchQuery.value) return items.value
   const q = searchQuery.value.toLowerCase()
-  return items.value.filter(item =>
-    String(item.vehiculo).toLowerCase().includes(q) ||
-    String(item.surtidor).toLowerCase().includes(q)
+  return items.value.filter(i =>
+    String(i.vehiculo).toLowerCase().includes(q) || String(i.surtidor).toLowerCase().includes(q),
   )
 })
 const totalItems = computed(() => filteredItems.value.length)
+
+/* === Depósitos críticos solo si hay datos reales === */
+const hasDepositosData = computed(() => Array.isArray(depositos.value) && depositos.value.length > 0)
 const criticalDeposits = computed(() =>
-  hasDepositosData.value
-    ? (depositos.value?.filter(d => (d.PORCENTAJE ?? 100) <= 10) ?? [])
-    : []
+  hasDepositosData.value ? depositos.value!.filter(d => (d.PORCENTAJE ?? 100) <= 10) : [],
 )
 
-/** === OPCIONES DE GRÁFICO CHART.JS === */
+/* === Chart options/data === */
 const chartOptions: ChartOptions<'bar'> = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    tooltip: {
-      callbacks: {
-        label: function (context: any) {
-          return `${context.dataset.label}: ${context.parsed.y} L`
-        }
-      }
-    }
+    tooltip: { callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y} L` } },
   },
   scales: {
     y: {
       beginAtZero: true,
       title: { display: true, text: 'Litros', color: '#6b7280', font: { weight: 'bold' } },
       ticks: { color: '#6b7280' },
-      grid: { color: '#e5e7eb' }
+      grid: { color: '#e5e7eb' },
     },
-    x: {
-      ticks: { color: '#6b7280' },
-      grid: { display: false }
-    }
-  }
+    x: { ticks: { color: '#6b7280' }, grid: { display: false } },
+  },
 }
-
 const chartData = computed(() => {
   const hourlyTotals: number[] = Array(24).fill(0)
-  for (const suministro of items.value) {
-    const hour = dayjs(suministro.fecha_hora).hour()
-    if (hour >= 0 && hour <= 23) hourlyTotals[hour] += suministro.litros
+  for (const s of items.value) {
+    const h = dayjs(s.fecha_hora).hour()
+    if (h >= 0 && h <= 23) hourlyTotals[h] += s.litros
   }
   return {
     labels: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`),
-    datasets: [
-      {
-        label: 'Litros',
-        data: hourlyTotals,
-        backgroundColor: '#0261F4',
-        borderRadius: 4
-      }
-    ]
+    datasets: [{ label: 'Litros', data: hourlyTotals, backgroundColor: '#0261F4', borderRadius: 4 }],
   }
 })
 </script>
@@ -142,6 +111,7 @@ const chartData = computed(() => {
 <template>
   <div class="min-h-dvh bg-slate-50 text-slate-900">
     <main class="mx-auto max-w-[1800px] px-4 sm:px-6 py-6">
+      <!-- Header -->
       <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="text-2xl font-bold text-slate-800">Dashboard de Gasoil</h1>
@@ -178,15 +148,13 @@ const chartData = computed(() => {
       </header>
 
       <div class="space-y-6">
-        <!-- Alertas: solo aparecen si hay depósitos críticos y, por tanto, si hay datos -->
+        <!-- Alertas críticas de depósitos (solo si hay datos y hay críticos) -->
         <section
           v-if="criticalDeposits.length > 0"
           class="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm"
         >
           <div class="flex items-center gap-3">
-            <div class="text-red-600">
-              <TriangleAlert class="h-6 w-6" />
-            </div>
+            <div class="text-red-600"><TriangleAlert class="h-6 w-6" /></div>
             <h2 class="text-lg font-semibold text-red-800">Alertas Críticas</h2>
           </div>
           <ul class="mt-3 space-y-2">
@@ -226,31 +194,51 @@ const chartData = computed(() => {
           </div>
         </section>
 
-        <!-- Estado de Depósitos: SOLO si hay datos -->
-        <section
-          v-if="hasDepositosData"
-          class="rounded-2xl border border-slate-200/80 bg-white shadow-sm"
-        >
+        <!-- Estado de Depósitos (sin inventar datos) -->
+        <section class="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <header class="p-4 border-b border-slate-200">
             <h2 class="text-base font-semibold text-slate-800">Estado de Depósitos</h2>
           </header>
-          <div class="p-4 space-y-4">
+
+          <!-- Cargando -->
+          <div v-if="isLoadingDepositos" class="p-6 text-center text-slate-500 text-sm">
+            Cargando datos de depósitos…
+          </div>
+
+          <!-- Error o sin datos -->
+          <div
+            v-else-if="depositosError || !depositos || depositos.length === 0"
+            class="p-6 text-center text-slate-600 text-sm"
+          >
+            No se han recibido datos de depósitos.
+          </div>
+
+          <!-- Con datos -->
+          <div v-else class="p-4 space-y-4">
             <div v-for="deposito in depositos" :key="deposito.ID_DEPOSITO">
               <div class="flex justify-between items-center mb-1">
                 <span class="text-sm font-bold text-slate-800">{{ deposito.NOMBRE }}</span>
-                <span
-                  :class="['text-xs font-bold px-2 py-0.5 rounded-full', getDepositoStatus(deposito).class]"
-                >
-                  {{ deposito.PORCENTAJE ?? 0 }}%
+                <span :class="['text-xs font-bold px-2 py-0.5 rounded-full', getDepositoStatus(deposito).class]">
+                  <!-- Nunca inventar: si no hay porcentaje, mostramos ‘—’ -->
+                  {{ deposito.PORCENTAJE ?? '—' }}{{ deposito.PORCENTAJE != null ? '%' : '' }}
                 </span>
               </div>
-              <div class="relative h-2 w-full rounded-full bg-slate-200">
+              <div class="relative h-2 w-full rounded-full bg-slate-200" aria-hidden="true">
                 <div
                   class="absolute top-0 left-0 h-2 rounded-full transition-all duration-500"
                   :class="getDepositoStatus(deposito).colorClass"
-                  :style="{ width: (deposito.PORCENTAJE ?? 0) + '%' }"
+                  :style="{
+                    width:
+                      deposito.PORCENTAJE != null && !Number.isNaN(Number(deposito.PORCENTAJE))
+                        ? `${deposito.PORCENTAJE}%`
+                        : '0%'
+                  }"
                 />
               </div>
+              <p class="mt-1 text-xs text-slate-500">
+                Capacidad: {{ deposito.CAPACIDAD ?? '—' }} · Litros actuales: {{ deposito.LITROS_ACTUALES ?? '—' }}
+                · Último suministro: {{ deposito.ULTIMO_SUMINISTRO ?? '—' }}
+              </p>
             </div>
           </div>
         </section>
@@ -269,9 +257,7 @@ const chartData = computed(() => {
             </div>
 
             <div class="flex justify-between items-center mb-4">
-              <h4 class="text-sm font-semibold text-slate-700">
-                Registros Individuales ({{ totalItems }})
-              </h4>
+              <h4 class="text-sm font-semibold text-slate-700">Registros Individuales ({{ totalItems }})</h4>
               <div class="relative">
                 <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
@@ -320,7 +306,5 @@ const chartData = computed(() => {
 </template>
 
 <style scoped>
-.tabular-nums {
-  font-variant-numeric: tabular-nums;
-}
+.tabular-nums { font-variant-numeric: tabular-nums; }
 </style>
