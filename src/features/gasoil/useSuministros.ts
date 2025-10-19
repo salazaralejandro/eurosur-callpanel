@@ -1,14 +1,14 @@
-// src/features/gasoil/useSuministros.ts
 import { computed, unref, type Ref } from 'vue'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/vue-query'
 
-type SuministroRaw = any // la API devuelve arrays; lo tratamos de forma defensiva
+
+type SuministroRaw = any
 
 export type Suministro = {
   id: number | string
   litros: number
-  fecha_hora: string // ISO o texto de la API
+  fecha_hora: string 
   vehiculo?: string | number
   surtidor?: string | number
 }
@@ -27,19 +27,18 @@ function rangoDia(d: string) {
 }
 
 function normalizar(raw: any): Suministro[] {
-
   if (!raw) return []
   const data = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : []
 
   return data.map((row: unknown, idx: number) => {
     const arr = Array.isArray(row) ? row : []
-    const id_usuario           = arr[0] ?? null
-    const id_vehiculo          = arr[1] ?? null
-    const km                   = arr[2] ?? null
+    const id_usuario = arr[0] ?? null
+    const id_vehiculo = arr[1] ?? null
+    const km = arr[2] ?? null
     const litros_suministrados = arr[3] ?? 0
-    const precio               = arr[4] ?? null
-    const fecha_y_hora         = arr[5] ?? ''
-    const num_serie_surtidor   = arr[6] ?? null
+    const precio = arr[4] ?? null
+    const fecha_y_hora = arr[5] ?? ''
+    const num_serie_surtidor = arr[6] ?? null
 
     return {
       id: `${fecha_y_hora ?? 'row'}-${idx}`,
@@ -58,24 +57,22 @@ export function useSuministrosDia(fechaRef: Ref<string>, refetchMsIfToday = 60_0
 
   return useQuery({
     queryKey: ['suministros-día', fechaRef],
-    
-    // --- CAMBIO IMPORTANTE ---
-    // Ahora 'queryFn' llama a nuestro proxy PHP.
     queryFn: async () => {
       const fecha = unref(fechaRef)
       const { inicio, fin } = rangoDia(fecha)
       
-      // Llamamos a la URL relativa de nuestro proxy PHP
-      const res = await fetch(`/api/suministros.php?inicio=${inicio}&fin=${fin}`)
-      
+      // --- ESTE ES EL CAMBIO MÁS IMPORTANTE ---
+      // Llamamos a nuestra propia API Route de Vercel
+      // La ruta es /api/suministros (sin .ts, .php, etc.)
+      const res = await fetch(`/api/suministros?inicio=${inicio}&fin=${fin}`);
+
       if (!res.ok) {
-        throw new Error('Error al contactar el proxy PHP de la API');
+        throw new Error('La petición a la API Route de Vercel falló');
       }
-      
-      const data = await res.json()
-      return normalizar(data)
+
+      const data = await res.json();
+      return normalizar(data);
     },
-    // auto-refresh solo si es hoy
     refetchInterval: () => (isToday.value ? refetchMsIfToday : false),
     staleTime: 30_000,
     select: (items: Suministro[]) => {

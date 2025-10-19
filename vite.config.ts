@@ -17,11 +17,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: p => p.replace(/^\/smsapi/, ''),
       },
-      '/gasoapi': {
-        target: 'https://api.gasoges.es/v1',
-        changeOrigin: true,
-        rewrite: p => p.replace(/^\/gasoapi/, ''),
-      },
     },
   },
 })
