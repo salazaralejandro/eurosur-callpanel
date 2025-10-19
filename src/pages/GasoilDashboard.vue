@@ -13,6 +13,7 @@ import {
   BarElement,
   CategoryScale,
   LinearScale,
+  type ChartOptions // <-- CORRECCIÓN 1: Importar el tipo de las opciones
 } from 'chart.js'
 
 // Registrar los módulos necesarios de Chart.js
@@ -87,7 +88,8 @@ const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTA
 
 
 /** === OPCIONES DE GRÁFICO CHART.JS === */
-const chartOptions = {
+// CORRECCIÓN 2: Tipar explícitamente el objeto de opciones
+const chartOptions: ChartOptions<'bar'> = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -110,13 +112,12 @@ const chartOptions = {
         text: 'Litros',
         color: '#6b7280',
         font: {
-          weight: '500'
+          weight: 'bold'
         }
       },
       ticks: { color: '#6b7280' },
       grid: {
         color: '#e5e7eb',
-        borderDash: [4, 4]
       }
     },
     x: {
@@ -124,7 +125,7 @@ const chartOptions = {
       grid: { display: false },
     },
   },
-}
+};
 
 const chartData = computed(() => {
   const hourlyTotals: number[] = Array(24).fill(0)
@@ -253,6 +254,7 @@ const chartData = computed(() => {
               Cargando gráfico...
             </div>
             <div v-else class="h-64 mb-6">
+              <!-- CORRECCIÓN 3: Pasar el objeto de opciones directamente -->
               <Bar :data="chartData" :options="chartOptions" />
             </div>
             <div class="flex justify-between items-center mb-4"> <h4 class="text-sm font-semibold text-slate-700">
