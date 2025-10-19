@@ -2,7 +2,6 @@
 import { computed, unref, type Ref } from 'vue'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/vue-query'
-import { gasogesApi } from '@/utils/api'
 
 type SuministroRaw = any // la API devuelve arrays; lo tratamos de forma defensiva
 
@@ -59,12 +58,22 @@ export function useSuministrosDia(fechaRef: Ref<string>, refetchMsIfToday = 60_0
 
   return useQuery({
     queryKey: ['suministros-día', fechaRef],
-    // Trae los suministros para el día seleccionado
+    
+    // --- CAMBIO IMPORTANTE ---
+    // Ahora 'queryFn' llama a nuestro proxy PHP.
     queryFn: async () => {
       const fecha = unref(fechaRef)
       const { inicio, fin } = rangoDia(fecha)
-      const res = await gasogesApi.get(`suministros/todos/${inicio}/${fin}`).json<any>()
-      return normalizar(res)
+      
+      // Llamamos a la URL relativa de nuestro proxy PHP
+      const res = await fetch(`/api/suministros.php?inicio=${inicio}&fin=${fin}`)
+      
+      if (!res.ok) {
+        throw new Error('Error al contactar el proxy PHP de la API');
+      }
+      
+      const data = await res.json()
+      return normalizar(data)
     },
     // auto-refresh solo si es hoy
     refetchInterval: () => (isToday.value ? refetchMsIfToday : false),
@@ -80,3 +89,4 @@ export function useSuministrosDia(fechaRef: Ref<string>, refetchMsIfToday = 60_0
     },
   })
 }
+

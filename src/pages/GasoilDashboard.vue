@@ -2,6 +2,23 @@
 import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { RefreshCcw, Droplets, Truck, Gauge, Search, TriangleAlert } from 'lucide-vue-next'
+
+// --- INICIO CAMBIOS CHART.JS ---
+import { Bar } from 'vue-chartjs'
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+} from 'chart.js'
+
+// Registrar los módulos necesarios de Chart.js
+ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
+// --- FIN CAMBIOS CHART.JS ---
+
 import { useSuministrosDia, type Suministro } from '@/features/gasoil/useSuministros'
 import { useDepositos, type EstadoDeposito } from '@/features/gasoil/useGasoil'
 
@@ -67,6 +84,69 @@ const filteredItems = computed(() => {
 })
 const totalItems = computed(() => filteredItems.value.length)
 const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTAJE ?? 100) <= 10) ?? [])
+
+
+/** === OPCIONES DE GRÁFICO CHART.JS === */
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: false,
+    },
+    tooltip: {
+      callbacks: {
+        label: function(context: any) {
+          return `${context.dataset.label}: ${context.parsed.y} L`;
+        }
+      }
+    }
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      title: {
+        display: true,
+        text: 'Litros',
+        color: '#6b7280',
+        font: {
+          weight: '500'
+        }
+      },
+      ticks: { color: '#6b7280' },
+      grid: {
+        color: '#e5e7eb',
+        borderDash: [4, 4]
+      }
+    },
+    x: {
+      ticks: { color: '#6b7280' },
+      grid: { display: false },
+    },
+  },
+}
+
+const chartData = computed(() => {
+  const hourlyTotals: number[] = Array(24).fill(0)
+  for (const suministro of items.value) {
+    const hour = dayjs(suministro.fecha_hora).hour()
+    if (hour >= 0 && hour <= 23) {
+      hourlyTotals[hour] += suministro.litros
+    }
+  }
+
+  return {
+    labels: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`),
+    datasets: [
+      {
+        label: 'Litros',
+        data: hourlyTotals,
+        backgroundColor: '#0261F4',
+        borderRadius: 4,
+      },
+    ],
+  }
+})
 
 </script>
 
@@ -169,14 +249,17 @@ const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTA
             </h3>
           </header>
           <div class="p-4">
-            <div class="h-64 mb-6 flex items-center justify-center text-slate-500 text-lg">
-              Gráfico temporalmente desactivado.
+            <div v-if="isLoading" class="h-64 mb-6 flex items-center justify-center text-slate-500 text-lg">
+              Cargando gráfico...
+            </div>
+            <div v-else class="h-64 mb-6">
+              <Bar :data="chartData" :options="chartOptions" />
             </div>
             <div class="flex justify-between items-center mb-4"> <h4 class="text-sm font-semibold text-slate-700">
                 Registros Individuales ({{ totalItems }})
               </h4>
               <div class="relative">
-                <Search class="absolute left-3 top-1/2 -translate-y-1-2 h-4 w-4 text-slate-400"/>
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"/>
                 <input type="text" v-model="searchQuery" placeholder="Filtrar por vehículo..." class="pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg w-48 focus:ring-2 focus:ring-blue-500 focus:outline-none"/>
               </div>
             </div>
@@ -212,8 +295,8 @@ const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTA
 </template>
 
 <style scoped>
-/* Estilo para asegurar que los números no "bailen" */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 </style>
+
