@@ -4,6 +4,9 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "types": ["vite/client"],
 
+    // --- AÑADE ESTA LÍNEA PARA ARREGLAR ECHARTS ---
+    "esModuleInterop": true,
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -14,3 +17,4 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
 }
+
