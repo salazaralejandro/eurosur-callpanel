@@ -89,8 +89,8 @@ const chartSeries = computed(() => {
 // <--- CORRECCIÓN 2: Tipar la propiedad computada
 const chartOptions = computed<ApexOptions>(() => ({
   chart: {
-    type: 'bar', // TypeScript ahora sabe que esto es del tipo 'bar'
-    height: 250,
+    type: 'bar', // Definición de 'type' aquí
+    height: 250, // Definición de 'height' aquí
     toolbar: { show: false },
     fontFamily: 'Inter, sans-serif',
   },
@@ -260,7 +260,7 @@ const chartOptions = computed<ApexOptions>(() => ({
           </header>
           <div class="p-4">
             <div class="h-64 mb-6">
-              <VueApexCharts type="bar" height="250" :options="chartOptions" :series="chartSeries" />
+              <VueApexCharts :options="chartOptions" :series="chartSeries" />
             </div>
             <div class="flex justify-between items-center mb-4"> <h4 class="text-sm font-semibold text-slate-700">
                 Registros Individuales ({{ totalItems }})

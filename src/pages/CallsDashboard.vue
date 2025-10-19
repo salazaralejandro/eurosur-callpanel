@@ -54,19 +54,18 @@ const chartSeries = computed(() => {
   }]
 })
 
-// CAMBIO: Opciones de gráfico adaptadas a MODO CLARO
 // <--- CORRECCIÓN 2: Tipar la propiedad computada
 const chartOptions = computed<ApexOptions>(() => ({
   chart: {
-    type: 'area', // TypeScript ahora sabe que esto es del tipo 'area'
-    height: 250,
+    type: 'area', // Definición de 'type' aquí
+    height: 250, // Definición de 'height' aquí
     toolbar: { show: false },
     fontFamily: 'Inter, sans-serif',
     zoom: { enabled: false }
   },
   dataLabels: { enabled: false },
-  stroke: { curve: 'smooth', width: 3 }, // Mantenemos la línea gruesa
-  colors: ['#0261F4'], // Color azul original
+  stroke: { curve: 'smooth', width: 3 },
+  colors: ['#0261F4'],
   fill: {
     type: 'gradient',
     gradient: {
@@ -78,32 +77,32 @@ const chartOptions = computed<ApexOptions>(() => ({
     type: 'datetime',
     labels: {
       format: 'HH:mm',
-      style: { colors: '#6b7280' }, // color: slate-500
+      style: { colors: '#6b7280' },
     },
     tooltip: {
       enabled: false
     },
     axisBorder: { show: false },
-    axisTicks: { color: '#e5e7eb' } // color: slate-200
+    axisTicks: { color: '#e5e7eb' }
   },
   yaxis: {
     title: { 
       text: 'Llamadas', 
-      style: { color: '#6b7280', fontWeight: 500 } // color: slate-500
+      style: { color: '#6b7280', fontWeight: 500 }
     },
     labels: { 
-      style: { colors: '#6b7280' }, // color: slate-500
+      style: { colors: '#6b7280' },
       formatter: (val: number) => val.toFixed(0)
     },
     min: 0,
     forceNiceScale: true,
   },
   grid: {
-    borderColor: '#e5e7eb', // color: slate-200
+    borderColor: '#e5e7eb',
     strokeDashArray: 4,
   },
   tooltip: {
-    theme: 'light', // Tooltip modo claro
+    theme: 'light',
     x: { format: 'dd/MM/yy HH:mm' },
     y: { formatter: (val: number) => `${val.toFixed(0)} llamadas` },
   },
@@ -178,7 +177,7 @@ const chartOptions = computed<ApexOptions>(() => ({
               Cargando datos del gráfico...
             </div>
             <div v-else class="h-[250px]">
-              <VueApexCharts type="area" height="250" :options="chartOptions" :series="chartSeries" />
+              <VueApexCharts :options="chartOptions" :series="chartSeries" />
             </div>
           </div>
         </section>
