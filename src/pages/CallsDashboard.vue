@@ -3,7 +3,6 @@ import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
 import { useCallsKpis } from '@/features/calls/useCalls'
 import { getGasogesApiStatus, getMundoSmsApiStatus } from '@/utils/api'
-// RE-IMPORTADO: RefreshCcw
 import { RefreshCcw, Hourglass, PhoneCall, Users, TriangleAlert } from 'lucide-vue-next'
 
 const REFRESH_MS = 60_000 
@@ -34,16 +33,8 @@ const fmtTime = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', mi
 const fmtTimeWithSeconds = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 
-// Estado APIs
-const apiStatus = computed<'ok'|'loading'|'error'>(() => {
-  if (loadingCalls.value) return 'loading'
-  const gas = getGasogesApiStatus()
-  const sms = getMundoSmsApiStatus()
-  if (errorCalls.value || gas === 'error' || sms === 'error') return 'error'
-  return 'ok'
-})
 
-// --- Lógica del Gráfico de Área ---
+// --- Lógica del Gráfico ---
 const waitingHistory = ref<{ x: number, y: number }[]>([])
 
 watch(waitingNow, (newValue) => {
@@ -62,6 +53,7 @@ const chartSeries = computed(() => {
   }]
 })
 
+// CAMBIO: Opciones de gráfico adaptadas a MODO CLARO
 const chartOptions = computed(() => ({
   chart: {
     type: 'area',
@@ -71,8 +63,8 @@ const chartOptions = computed(() => ({
     zoom: { enabled: false }
   },
   dataLabels: { enabled: false },
-  stroke: { curve: 'smooth', width: 3 },
-  colors: ['#0261F4'],
+  stroke: { curve: 'smooth', width: 3 }, // Mantenemos la línea gruesa
+  colors: ['#0261F4'], // Color azul original
   fill: {
     type: 'gradient',
     gradient: {
@@ -84,102 +76,35 @@ const chartOptions = computed(() => ({
     type: 'datetime',
     labels: {
       format: 'HH:mm',
-      style: { colors: '#6b7280' },
+      style: { colors: '#6b7280' }, // color: slate-500
     },
     tooltip: {
       enabled: false
     },
     axisBorder: { show: false },
-    axisTicks: { color: '#e5e7eb' }
+    axisTicks: { color: '#e5e7eb' } // color: slate-200
   },
   yaxis: {
     title: { 
       text: 'Llamadas', 
-      style: { color: '#6b7280', fontWeight: 500 }
+      style: { color: '#6b7280', fontWeight: 500 } // color: slate-500
     },
     labels: { 
-      style: { colors: '#6b7280' },
+      style: { colors: '#6b7280' }, // color: slate-500
       formatter: (val: number) => val.toFixed(0)
     },
     min: 0,
     forceNiceScale: true,
   },
   grid: {
-    borderColor: '#e5e7eb',
+    borderColor: '#e5e7eb', // color: slate-200
     strokeDashArray: 4,
   },
   tooltip: {
-    theme: 'light',
+    theme: 'light', // Tooltip modo claro
     x: { format: 'dd/MM/yy HH:mm' },
     y: { formatter: (val: number) => `${val.toFixed(0)} llamadas` },
   },
-}))
-
-// --- AÑADIDO: Lógica del Gráfico Donut ---
-const donutSeries = computed(() => {
-  // Mostramos llamadas en espera vs agentes
-  return [waitingNow.value, agentsOnline.value]
-})
-
-const donutOptions = computed(() => ({
-  chart: {
-    type: 'donut',
-    height: 250,
-    fontFamily: 'Inter, sans-serif',
-  },
-  series: donutSeries.value,
-  labels: ['En Espera', 'Agentes Activos'],
-  colors: ['#f59e0b', '#0261F4'], // Amarillo (alerta) y Azul
-  legend: {
-    position: 'bottom',
-    fontSize: '14px',
-    markers: {
-      radius: 12,
-    },
-    itemMargin: {
-      horizontal: 10,
-    },
-  },
-  plotOptions: {
-    pie: {
-      donut: {
-        size: '65%',
-        labels: {
-          show: true,
-          total: {
-            show: true,
-            label: 'Total',
-            formatter: (w: any) => {
-              // El "total" es la suma, que no es tan relevante,
-              // pero lo mantenemos para coherencia.
-              const total = w.globals.seriesTotals.reduce((a: number, b: number) => a + b, 0)
-              return total
-            }
-          }
-        }
-      }
-    }
-  },
-  dataLabels: {
-    enabled: true,
-    formatter: (val: number, opts: any) => {
-      // Muestra el número real en el gráfico
-      return opts.w.config.series[opts.seriesIndex]
-    },
-    style: {
-      fontSize: '14px',
-      fontWeight: 'bold',
-    },
-    dropShadow: {
-      enabled: false
-    }
-  },
-  tooltip: {
-    theme: 'light',
-    y: {
-      formatter: (val: number) => val.toFixed(0)
-    }
-  }
 }))
 
 </script>
@@ -192,19 +117,13 @@ const donutOptions = computed(() => ({
         <div>
           <h1 class="text-4xl font-bold text-slate-800">Panel de Llamadas</h1>
         </div>
-        <div class="flex items-center gap-4">
-          <button @click="doRefetch" :disabled="fetchingCalls"
-            class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
-            <RefreshCcw :class="['h-4 w-4', fetchingCalls ? 'animate-spin' : '']" />
-          </button>
-          <div class="text-right">
-            <div class="text-4xl font-bold text-slate-900 tabular-nums">
-              {{ fmtTimeWithSeconds(clock) }}
-            </div>
-            <p class="text-lg text-slate-500 mt-1">
-              Actualizado: {{ lastUpdated ? fmtTime(lastUpdated) : '—' }}
-            </p>
+        <div class="text-right">
+          <div class="text-4xl font-bold text-slate-900 tabular-nums">
+            {{ fmtTimeWithSeconds(clock) }}
           </div>
+           <p class="text-lg text-slate-500 mt-1">
+            Actualizado: {{ lastUpdated ? fmtTime(lastUpdated) : '—' }}
+          </p>
         </div>
       </header>
 
@@ -265,44 +184,24 @@ const donutOptions = computed(() => ({
 
         </section>
         
-        <section class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          <div class="lg:col-span-2">
-            <section class="rounded-2xl border border-slate-200/80 bg-white shadow-sm h-full">
-              <header class="p-4 border-b border-slate-200">
-                <h3 class="text-2xl font-semibold text-slate-800">
-                  Actividad en espera (Últ. {{ MAX_HISTORY_POINTS }} min)
-                </h3>
-              </header>
-              <div class="p-4">
-                <div v-if="loadingCalls && waitingHistory.length === 0" class="h-[250px] flex items-center justify-center text-slate-500 text-lg">
-                  Cargando datos del gráfico...
-                </div>
-                <div v-else class="h-[250px]">
-                  <VueApexCharts type="area" height="250" :options="chartOptions" :series="chartSeries" />
-                </div>
-              </div>
-            </section>
+        <section class="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <header class="p-4 border-b border-slate-200">
+            <h3 class="text-2xl font-semibold text-slate-800">
+              Actividad en espera (Últ. {{ MAX_HISTORY_POINTS }} min)
+            </h3>
+          </header>
+          <div class="p-4">
+            <div v-if="loadingCalls && waitingHistory.length === 0" class="h-[250px] flex items-center justify-center text-slate-500 text-lg">
+              Cargando datos del gráfico...
+            </div>
+            <div v-else class="h-[250px]">
+              <VueApexCharts type="area" height="250" :options="chartOptions" :series="chartSeries" />
+            </div>
           </div>
-
-          <div class="lg:col-span-1">
-             <section class="rounded-2xl border border-slate-200/80 bg-white shadow-sm h-full">
-              <header class="p-4 border-b border-slate-200">
-                <h3 class="text-2xl font-semibold text-slate-800">
-                  Estado Actual
-                </h3>
-              </header>
-              <div class="p-4">
-                <div class="h-[250px] flex items-center justify-center">
-                  <VueApexCharts type="donut" height="250" :options="donutOptions" :series="donutSeries" />
-                </div>
-              </div>
-            </section>
-          </div>
-
         </section>
 
       </div>
+
     </main>
   </div>
 </template>
