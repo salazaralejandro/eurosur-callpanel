@@ -2,8 +2,27 @@
 import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { RefreshCcw, Droplets, Truck, Gauge, Search, TriangleAlert } from 'lucide-vue-next'
-import VueApexCharts from 'vue3-apexcharts'
-import type { ApexOptions } from 'apexcharts' // <--- CORRECCIÓN 1: Importar tipo
+// --- INICIO CAMBIOS ECHARTS ---
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { BarChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  TitleComponent,
+} from 'echarts/components'
+
+// Registrar los módulos de ECharts
+use([
+  CanvasRenderer,
+  BarChart,
+  GridComponent,
+  TooltipComponent,
+  TitleComponent,
+])
+// --- FIN CAMBIOS ECHARTS ---
+
 import { useSuministrosDia, type Suministro } from '@/features/gasoil/useSuministros'
 import { useDepositos, type EstadoDeposito } from '@/features/gasoil/useGasoil'
 
@@ -13,6 +32,9 @@ const selectedDate = ref<string>(today)
 const isToday = computed(() => selectedDate.value === today)
 
 /** === Datos Suministros === */
+// V--- CORRECCIÓN ---V
+// Volvemos a pasar el valor directamente para que coincida con el tipo (number)
+// que espera el hook 'useSuministrosDia'.
 const { data, isLoading, isFetching, refetch } = useSuministrosDia(selectedDate, isToday.value ? 60_000 : 0)
 
 /** === Datos Depósitos === */
@@ -71,8 +93,10 @@ const totalItems = computed(() => filteredItems.value.length)
 const criticalDeposits = computed(() => depositos.value?.filter(d => (d.PORCENTAJE ?? 100) <= 10) ?? [])
 
 
-/** === Datos para el Gráfico (ApexCharts) === */
-const chartSeries = computed(() => {
+/** === OPCIONES DE GRÁFICO ECHARTS === */
+const chartOption = computed(() => {
+  
+  // 1. Calculamos los datos aquí dentro
   const hourlyTotals: number[] = Array(24).fill(0)
   for (const suministro of items.value) {
     const hour = dayjs(suministro.fecha_hora).hour()
@@ -80,82 +104,59 @@ const chartSeries = computed(() => {
       hourlyTotals[hour] += suministro.litros
     }
   }
-  return [{
-    name: 'Litros',
-    data: hourlyTotals
-  }]
-})
 
-// <--- CORRECCIÓN 2: Tipar la propiedad computada
-const chartOptions = computed<ApexOptions>(() => ({
-  chart: {
-    type: 'bar', // Definición de 'type' aquí
-    height: 250, // Definición de 'height' aquí
-    toolbar: { show: false },
-    fontFamily: 'Inter, sans-serif',
-  },
-  plotOptions: {
-    bar: {
-      borderRadius: 4,
-      horizontal: false,
-      columnWidth: '60%',
+  // 2. Retornamos el objeto de opciones
+  return {
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
     },
-  },
-  dataLabels: {
-    enabled: false,
-  },
-  stroke: {
-    show: true,
-    width: 2,
-    colors: ['transparent'],
-  },
-  xaxis: {
-    categories: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`),
-    labels: {
-      style: {
-        colors: '#6b7280',
-        fontSize: '12px',
-      },
-    }
-  },
-  yaxis: {
-    title: {
-      text: 'Litros',
-      style: {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' }, // Sombra en la barra
+      formatter: (params: any) => {
+        const data = params[0]
+        return `${data.name}<br /><strong>${data.value} L</strong>`
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`),
+      axisLabel: { color: '#6b7280' },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      name: 'Litros',
+      nameTextStyle: {
         color: '#6b7280',
         fontWeight: 500
       },
-    },
-    labels: {
-      style: {
-        colors: '#6b7280',
-      },
-    }
-  },
-  fill: {
-    opacity: 1,
-  },
-  tooltip: {
-    y: {
-      formatter: (val: number) => `${val.toFixed(0)} L`,
-    },
-  },
-  grid: {
-    borderColor: '#e5e7eb',
-    strokeDashArray: 4,
-    yaxis: {
-      lines: {
-        show: true,
-      },
-    },
-    xaxis: {
-      lines: {
-        show: false,
+      axisLabel: { color: '#6b7280' },
+      splitLine: {
+        lineStyle: {
+          color: '#e5e7eb',
+          type: 'dashed'
+        }
       }
-    }
-  },
-  colors: ['#0261F4'],
-}))
+    },
+    series: [
+      {
+        name: 'Litros',
+        type: 'bar',
+        barWidth: '60%',
+        data: hourlyTotals,
+        itemStyle: {
+          color: '#0261F4',
+          borderRadius: [4, 4, 0, 0] // Borde redondeado solo arriba
+        }
+      }
+    ]
+  }
+})
 
 </script>
 
@@ -178,11 +179,10 @@ const chartOptions = computed<ApexOptions>(() => ({
             class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
             Ayer
           </button>
-          
            <button @click="() => refetch()" :disabled="isFetching"
-            class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
-            <RefreshCcw :class="['h-4 w-4', isFetching ? 'animate-spin' : '']" />
-           </button>
+          class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black active:scale-[0.98] disabled:opacity-60">
+          <RefreshCcw :class="['h-4 w-4', isFetching ? 'animate-spin' : '']" />
+        </button>
         </div>
       </header>
       
@@ -260,7 +260,7 @@ const chartOptions = computed<ApexOptions>(() => ({
           </header>
           <div class="p-4">
             <div class="h-64 mb-6">
-              <VueApexCharts :options="chartOptions" :series="chartSeries" />
+              <VChart :option="chartOption" autoresize />
             </div>
             <div class="flex justify-between items-center mb-4"> <h4 class="text-sm font-semibold text-slate-700">
                 Registros Individuales ({{ totalItems }})

@@ -1,9 +1,27 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import VueApexCharts from 'vue3-apexcharts'
-import type { ApexOptions } from 'apexcharts' // <--- CORRECCIÓN 1: Importar tipo
+// --- INICIO CAMBIOS ECHARTS ---
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  TitleComponent,
+} from 'echarts/components'
+
+// Registrar los módulos de ECharts
+use([
+  CanvasRenderer,
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  TitleComponent,
+])
+// --- FIN CAMBIOS ECHARTS ---
+
 import { useCallsKpis } from '@/features/calls/useCalls'
-import { getGasogesApiStatus, getMundoSmsApiStatus } from '@/utils/api'
 import { RefreshCcw, Hourglass, PhoneCall, Users, TriangleAlert } from 'lucide-vue-next'
 
 const REFRESH_MS = 60_000 
@@ -47,67 +65,76 @@ watch(waitingNow, (newValue) => {
   lastUpdated.value = new Date()
 })
 
-const chartSeries = computed(() => {
-  return [{
-    name: 'Llamadas en Espera',
-    data: waitingHistory.value
-  }]
-})
-
-// <--- CORRECCIÓN 2: Tipar la propiedad computada
-const chartOptions = computed<ApexOptions>(() => ({
-  chart: {
-    type: 'area', // Definición de 'type' aquí
-    height: 250, // Definición de 'height' aquí
-    toolbar: { show: false },
-    fontFamily: 'Inter, sans-serif',
-    zoom: { enabled: false }
-  },
-  dataLabels: { enabled: false },
-  stroke: { curve: 'smooth', width: 3 },
-  colors: ['#0261F4'],
-  fill: {
-    type: 'gradient',
-    gradient: {
-      opacityFrom: 0.6,
-      opacityTo: 0.1,
-    }
-  },
-  xaxis: {
-    type: 'datetime',
-    labels: {
-      format: 'HH:mm',
-      style: { colors: '#6b7280' },
-    },
-    tooltip: {
-      enabled: false
-    },
-    axisBorder: { show: false },
-    axisTicks: { color: '#e5e7eb' }
-  },
-  yaxis: {
-    title: { 
-      text: 'Llamadas', 
-      style: { color: '#6b7280', fontWeight: 500 }
-    },
-    labels: { 
-      style: { colors: '#6b7280' },
-      formatter: (val: number) => val.toFixed(0)
-    },
-    min: 0,
-    forceNiceScale: true,
-  },
+// --- OPCIONES DE GRÁFICO ECHARTS ---
+const chartOption = computed(() => ({
   grid: {
-    borderColor: '#e5e7eb',
-    strokeDashArray: 4,
+    left: '3%',
+    right: '4%',
+    bottom: '3%',
+    containLabel: true // Importante para que las etiquetas no se corten
   },
   tooltip: {
-    theme: 'light',
-    x: { format: 'dd/MM/yy HH:mm' },
-    y: { formatter: (val: number) => `${val.toFixed(0)} llamadas` },
+    trigger: 'axis',
+    formatter: (params: any) => {
+      // ECharts usa 'params' como un array
+      const data = params[0]
+      const date = new Date(data.axisValue).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+      return `${date}<br /><strong>${data.value[1]} llamadas</strong>`
+    }
   },
+  xAxis: {
+    type: 'time', // ECharts maneja 'time' de forma nativa
+    axisLabel: {
+      formatter: '{HH}:{mm}', // Formato de hora
+      color: '#6b7280'
+    },
+    axisLine: { show: false },
+    axisTick: { lineStyle: { color: '#e5e7eb' } }
+  },
+  yAxis: {
+    type: 'value',
+    name: 'Llamadas',
+    nameTextStyle: {
+      color: '#6b7280',
+      fontWeight: 500
+    },
+    min: 0,
+    axisLabel: {
+      color: '#6b7280',
+      formatter: (val: number) => val.toFixed(0)
+    },
+    splitLine: { // Esto reemplaza el 'grid.borderColor'
+      lineStyle: {
+        color: '#e5e7eb',
+        type: 'dashed'
+      }
+    }
+  },
+  series: [
+    {
+      name: 'Llamadas en Espera',
+      type: 'line',
+      smooth: true,
+      symbol: 'none', // Oculta los puntos
+      // ECharts espera los datos como [timestamp, value]
+      data: waitingHistory.value.map(p => [p.x, p.y]),
+      // Estilo del área
+      areaStyle: {
+        color: '#0261F4',
+        opacity: 0.3
+      },
+      // Estilo de la línea
+      lineStyle: {
+        color: '#0261F4',
+        width: 3
+      },
+      // Color del punto en el tooltip
+      itemStyle: {
+        color: '#0261F4'
+      }
+    }
+  ]
 }))
-
 </script>
 
 <template>
@@ -177,7 +204,7 @@ const chartOptions = computed<ApexOptions>(() => ({
               Cargando datos del gráfico...
             </div>
             <div v-else class="h-[250px]">
-              <VueApexCharts :options="chartOptions" :series="chartSeries" />
+              <VChart :option="chartOption" autoresize />
             </div>
           </div>
         </section>
