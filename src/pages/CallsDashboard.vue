@@ -128,25 +128,6 @@ const chartOptions = computed(() => ({
       </header>
 
       <div class="space-y-8">
-
-        <section v-if="apiStatus !== 'ok'" 
-          class="rounded-2xl p-5 shadow-sm"
-          :class="apiStatus === 'error' ? 'border border-red-200 bg-red-50' : 'border border-yellow-200 bg-yellow-50'"
-        >
-           <div class="flex items-center gap-3">
-               <div :class="apiStatus === 'error' ? 'text-red-600' : 'text-yellow-600'">
-                 <TriangleAlert class="h-6 w-6"/>
-               </div>
-               <h2 class="text-xl font-semibold" :class="apiStatus === 'error' ? 'text-red-800' : 'text-yellow-800'">
-                 <template v-if="apiStatus === 'loading'">Conectando con las APIs…</template>
-                 <template v-else>Error de conexión de API</template>
-               </h2>
-            </div>
-            <p v-if="apiStatus === 'error'" class="mt-2 text-base text-red-700 font-medium pl-9">
-              Los datos pueden no ser correctos (Centralita, MundoSMS o GasoGes).
-            </p>
-        </section>
-
          <section class="grid grid-cols-1 sm:grid-cols-3 gap-8">
           
           <div class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
