@@ -1,89 +1,82 @@
-import { gasogesApi } from '@/utils/api'
+// src/features/gasoil/useSuministros.ts
+import { computed, unref, type Ref } from 'vue'
+import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/vue-query'
+import { gasogesApi } from '@/utils/api'
+
+type SuministroRaw = any // la API devuelve arrays; lo tratamos de forma defensiva
 
 export type Suministro = {
-  ID_USUARIO?: number | null
-  ID_VEHICULO?: number | null
-  KM?: number | null
-  LITROS_SUMINISTRADOS: number
-  PRECIO?: number | null
-  FECHA_HORA: string
-  NUMERO_SERIE_SURTIDOR?: number | string | null
+  id: number | string
+  litros: number
+  fecha_hora: string // ISO o texto de la API
+  vehiculo?: string | number
+  surtidor?: string | number
 }
 
-// YYYY-MM-DD
-export function ymd(d = new Date()) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+function parseNumber(n: unknown, fallback = 0): number {
+  const x = typeof n === 'string' ? Number(n.replace(',', '.')) : Number(n)
+  return Number.isFinite(x) ? x : fallback
 }
 
-/** Normaliza un registro que puede venir como objeto o como tupla (array) */
-function normalizeRow(raw: any): Suministro | null {
-  // A) OBJETO (con claves)
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    const litros = Number(
-      raw.LITROS_SUMINISTRADOS ?? raw['LITROS_SUMINISTRADOS'] ?? raw['litros'] ?? raw['LITROS']
-    )
-    if (!Number.isFinite(litros)) return null
-    const fecha =
-      raw.FECHA_HORA ?? raw['FECHA_HORA'] ?? raw['FECHA Y HORA'] ?? raw['fecha_hora'] ?? raw['fecha'] ?? ''
+// La API /v1/suministros/todos/{inicio}/{fin} acepta YYYY-MM-DD
+function rangoDia(d: string) {
+  const y = dayjs(d)
+  const inicio = y.format('YYYY-MM-DD')
+  const fin = y.format('YYYY-MM-DD')
+  return { inicio, fin }
+}
+
+function normalizar(raw: any): Suministro[] {
+
+  if (!raw) return []
+  const data = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : []
+
+  return data.map((row: unknown, idx: number) => {
+    const arr = Array.isArray(row) ? row : []
+    const id_usuario           = arr[0] ?? null
+    const id_vehiculo          = arr[1] ?? null
+    const km                   = arr[2] ?? null
+    const litros_suministrados = arr[3] ?? 0
+    const precio               = arr[4] ?? null
+    const fecha_y_hora         = arr[5] ?? ''
+    const num_serie_surtidor   = arr[6] ?? null
+
     return {
-      ID_USUARIO: raw.ID_USUARIO ?? null,
-      ID_VEHICULO: raw.ID_VEHICULO ?? null,
-      KM: raw.KM ?? null,
-      LITROS_SUMINISTRADOS: litros,
-      PRECIO: raw.PRECIO != null ? Number(raw.PRECIO) : null,
-      FECHA_HORA: String(fecha),
-      NUMERO_SERIE_SURTIDOR: raw.NUMERO_SERIE_SURTIDOR ?? raw['NUMERO DE SERIE SURTIDOR'] ?? null,
-    }
-  }
-
-  // B) TUPLA (array) en el orden documentado
-  // [0] ID_USUARIO
-  // [1] ID_VEHICULO
-  // [2] KM
-  // [3] LITROS_SUMINISTRADOS
-  // [4] PRECIO
-  // [5] "FECHA Y HORA"
-  // [6] NUMERO_SERIE_SURTIDOR
-  if (Array.isArray(raw)) {
-    const litros = Number(raw[3])
-    if (!Number.isFinite(litros)) return null
-    return {
-      ID_USUARIO: raw[0] ?? null,
-      ID_VEHICULO: raw[1] ?? null,
-      KM: raw[2] ?? null,
-      LITROS_SUMINISTRADOS: litros,
-      PRECIO: raw[4] != null ? Number(raw[4]) : null,
-      FECHA_HORA: raw[5] ? String(raw[5]) : '',
-      NUMERO_SERIE_SURTIDOR: raw[6] ?? null,
-    }
-  }
-
-  return null
+      id: `${fecha_y_hora ?? 'row'}-${idx}`,
+      litros: parseNumber(litros_suministrados),
+      fecha_hora: String(fecha_y_hora ?? ''),
+      vehiculo: id_vehiculo ?? undefined,
+      surtidor: num_serie_surtidor ?? undefined,
+    } as Suministro
+  })
 }
 
-export function useSuministros(inicio: string, fin: string, refetchMs = 60_000) {
+
+export function useSuministrosDia(fechaRef: Ref<string>, refetchMsIfToday = 60_000) {
+  const todayStr = dayjs().format('YYYY-MM-DD')
+  const isToday = computed(() => unref(fechaRef) === todayStr)
+
   return useQuery({
-    queryKey: ['suministros', inicio, fin],
+    queryKey: ['suministros-día', fechaRef],
+    // Trae los suministros para el día seleccionado
     queryFn: async () => {
-      const res = await gasogesApi
-        .get(`suministros/todos/${encodeURIComponent(inicio)}/${encodeURIComponent(fin)}`)
-        .json<unknown>()
-
-      const raw: any[] =
-        Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as any).data) ? (res as any).data : [])
-
-      return raw
-        .map(normalizeRow)
-        .filter((r): r is Suministro => !!r)
-        .sort((a, b) => (a.FECHA_HORA < b.FECHA_HORA ? 1 : -1)) // recientes primero
+      const fecha = unref(fechaRef)
+      const { inicio, fin } = rangoDia(fecha)
+      const res = await gasogesApi.get(`suministros/todos/${inicio}/${fin}`).json<any>()
+      return normalizar(res)
     },
-    refetchInterval: refetchMs,
-    refetchIntervalInBackground: true,
-    staleTime: Math.floor(refetchMs * 0.5),
-    initialData: [] as Suministro[],
+    // auto-refresh solo si es hoy
+    refetchInterval: () => (isToday.value ? refetchMsIfToday : false),
+    staleTime: 30_000,
+    select: (items: Suministro[]) => {
+      const totalLitros = items.reduce((acc, s) => acc + (s.litros || 0), 0)
+      const operaciones = items.length
+      const promedio = operaciones ? Math.round((totalLitros / operaciones) * 100) / 100 : 0
+      const ultimos = [...items]
+        .sort((a, b) => String(b.fecha_hora).localeCompare(String(a.fecha_hora)))
+        .slice(0, 5)
+      return { items, totalLitros, operaciones, promedio, ultimos }
+    },
   })
 }

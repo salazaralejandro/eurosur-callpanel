@@ -1,38 +1,29 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Settings, Save, ArrowLeft, AlertTriangle, Bell } from 'lucide-vue-next'
+import { Settings, Save, ArrowLeft, AlertTriangle, Bell, Volume2 } from 'lucide-vue-next'
 import { useConfigStore } from '@/store/config'
 
 const router = useRouter()
 const configStore = useConfigStore()
 
-// Estados locales del formulario
 const umbralAlerta = ref(configStore.umbralAlerta)
 const umbralCritico = ref(configStore.umbralCritico)
 const sonidoHabilitado = ref(configStore.sonidoHabilitado)
-const notificacionesSMS = ref(configStore.notificacionesSMS)
-const telefonosNotificacion = ref(configStore.telefonosNotificacion.join(', '))
 
 const guardando = ref(false)
 const mensaje = ref('')
+const errorMensaje = ref('')
 
 // Validación
 const errores = computed(() => {
   const e: Record<string, string> = {}
-  
   if (umbralAlerta.value <= umbralCritico.value) {
-    e.umbral = 'El umbral de alerta debe ser mayor que el umbral crítico'
+    e.umbral = 'El umbral de alerta debe ser mayor que el umbral crítico.'
   }
-  
   if (umbralAlerta.value < 0 || umbralCritico.value < 0) {
-    e.negativo = 'Los valores no pueden ser negativos'
+    e.negativo = 'Los valores no pueden ser negativos.'
   }
-  
-  if (notificacionesSMS.value && !telefonosNotificacion.value.trim()) {
-    e.telefonos = 'Debe especificar al menos un teléfono para las notificaciones'
-  }
-  
   return e
 })
 
@@ -40,230 +31,159 @@ const formularioValido = computed(() => Object.keys(errores.value).length === 0)
 
 // Guardar configuración
 const guardarConfig = async () => {
-  if (!formularioValido.value) return
+  if (!formularioValido.value) {
+    errorMensaje.value = errores.value.umbral || errores.value.negativo || 'Hay errores en el formulario.'
+    setTimeout(() => { errorMensaje.value = '' }, 3000)
+    return
+  }
   
   guardando.value = true
   mensaje.value = ''
+  errorMensaje.value = ''
   
   try {
-    // Parsear teléfonos
-    const telefonos = telefonosNotificacion.value
-      .split(',')
-      .map(t => t.trim())
-      .filter(t => t.length > 0)
-    
-    // Actualizar store
     configStore.updateConfig({
       umbralAlerta: umbralAlerta.value,
       umbralCritico: umbralCritico.value,
       sonidoHabilitado: sonidoHabilitado.value,
-      notificacionesSMS: notificacionesSMS.value,
-      telefonosNotificacion: telefonos
     })
     
-    mensaje.value = 'Configuración guardada correctamente'
-    
-    setTimeout(() => {
-      mensaje.value = ''
-    }, 3000)
+    mensaje.value = 'Configuración guardada correctamente.'
+    setTimeout(() => { mensaje.value = '' }, 3000)
     
   } catch (error) {
-    mensaje.value = 'Error al guardar la configuración'
+    errorMensaje.value = 'Error al guardar la configuración.'
+    setTimeout(() => { errorMensaje.value = '' }, 3000)
   } finally {
     guardando.value = false
   }
 }
+
+// === Clases dinámicas para Inputs (para limpieza de template) ===
+const baseInputClass = "w-full rounded-lg bg-white transition-colors duration-150 border-2 focus:outline-none focus:ring-4"
+const normalInputClass = "border-slate-200 focus:border-blue-500 focus:ring-blue-600/10"
+const errorInputClass = "border-red-500 focus:border-red-500 focus:ring-red-600/10"
+
 </script>
 
 <template>
-  <div class="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-white">
-    <!-- Header -->
-    <header class="border-b border-neutral-200 dark:border-white/10 bg-white dark:bg-white/5">
-      <div class="max-w-4xl mx-auto px-4 py-4">
-        <div class="flex items-center justify-between">
+  <div class="min-h-screen bg-slate-50 text-slate-900">
+    
+    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur-sm shadow-sm">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          
           <div class="flex items-center gap-4">
             <button
               @click="router.push('/')"
-              class="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
+              class="p-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              aria-label="Volver al inicio"
             >
               <ArrowLeft class="h-5 w-5" />
             </button>
-            
             <div class="flex items-center gap-3">
-              <Settings class="h-6 w-6 text-[#0261F4]" />
-              <h1 class="text-2xl font-semibold">Configuración del Sistema</h1>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- Content -->
-    <main class="max-w-4xl mx-auto px-4 py-8">
-      <!-- Mensaje de estado -->
-      <div
-        v-if="mensaje"
-        class="mb-6 p-4 rounded-lg"
-        :class="mensaje.includes('Error') 
-          ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300'
-          : 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300'"
-      >
-        {{ mensaje }}
-      </div>
-
-      <!-- Formulario -->
-      <form @submit.prevent="guardarConfig" class="space-y-8">
-        <!-- Sección: Umbrales de Combustible -->
-        <section class="bg-white dark:bg-white/5 rounded-xl border border-neutral-200 dark:border-white/10 p-6">
-          <div class="flex items-center gap-3 mb-6">
-            <AlertTriangle class="h-5 w-5 text-amber-600" />
-            <h2 class="text-lg font-semibold">Umbrales de Combustible</h2>
-          </div>
-
-          <div class="grid gap-6 md:grid-cols-2">
-            <!-- Umbral de Alerta -->
-            <div>
-              <label for="umbralAlerta" class="block text-sm font-medium mb-2">
-                Umbral de Alerta (litros)
-              </label>
-              <input
-                id="umbralAlerta"
-                v-model.number="umbralAlerta"
-                type="number"
-                min="0"
-                step="50"
-                class="w-full rounded-lg border-2 border-neutral-200 dark:border-white/20 
-                       bg-white dark:bg-white/5 px-4 py-2.5
-                       focus:border-[#0261F4] focus:outline-none focus:ring-4 focus:ring-[#0261F4]/10
-                       dark:focus:border-[#4A8CFF] dark:focus:ring-[#4A8CFF]/10"
-                :class="errores.umbral && 'border-red-500 dark:border-red-400'"
-              />
-              <p class="mt-1.5 text-sm text-neutral-600 dark:text-neutral-400">
-                Se mostrará advertencia cuando queden menos de {{ umbralAlerta }}L
-              </p>
-            </div>
-
-            <!-- Umbral Crítico -->
-            <div>
-              <label for="umbralCritico" class="block text-sm font-medium mb-2">
-                Umbral Crítico (litros)
-              </label>
-              <input
-                id="umbralCritico"
-                v-model.number="umbralCritico"
-                type="number"
-                min="0"
-                step="50"
-                class="w-full rounded-lg border-2 border-neutral-200 dark:border-white/20 
-                       bg-white dark:bg-white/5 px-4 py-2.5
-                       focus:border-[#0261F4] focus:outline-none focus:ring-4 focus:ring-[#0261F4]/10
-                       dark:focus:border-[#4A8CFF] dark:focus:ring-[#4A8CFF]/10"
-                :class="errores.umbral && 'border-red-500 dark:border-red-400'"
-              />
-              <p class="mt-1.5 text-sm text-neutral-600 dark:text-neutral-400">
-                Alerta crítica con animación cuando queden menos de {{ umbralCritico }}L
-              </p>
+              <Settings class="h-6 w-6 text-blue-600" />
+              <h1 class="text-xl font-semibold text-slate-900">Configuración</h1>
             </div>
           </div>
 
-          <!-- Mensaje de error -->
-          <p v-if="errores.umbral" class="mt-3 text-sm text-red-600 dark:text-red-400">
-            {{ errores.umbral }}
-          </p>
-        </section>
-
-        <!-- Sección: Notificaciones -->
-        <section class="bg-white dark:bg-white/5 rounded-xl border border-neutral-200 dark:border-white/10 p-6">
-          <div class="flex items-center gap-3 mb-6">
-            <Bell class="h-5 w-5 text-[#0261F4]" />
-            <h2 class="text-lg font-semibold">Notificaciones</h2>
-          </div>
-
-          <div class="space-y-6">
-            <!-- Sonido de alerta -->
-            <label class="flex items-center gap-3 cursor-pointer">
-              <input
-                v-model="sonidoHabilitado"
-                type="checkbox"
-                class="w-4 h-4 rounded border-neutral-300 dark:border-white/30
-                       text-[#0261F4] focus:ring-[#0261F4]/20"
-              />
-              <div>
-                <span class="font-medium">Sonido de alerta</span>
-                <p class="text-sm text-neutral-600 dark:text-neutral-400">
-                  Reproducir sonido cuando se detecte nivel crítico
-                </p>
-              </div>
-            </label>
-
-            <!-- Notificaciones SMS -->
-            <div>
-              <label class="flex items-center gap-3 cursor-pointer mb-3">
-                <input
-                  v-model="notificacionesSMS"
-                  type="checkbox"
-                  class="w-4 h-4 rounded border-neutral-300 dark:border-white/30
-                         text-[#0261F4] focus:ring-[#0261F4]/20"
-                />
-                <div>
-                  <span class="font-medium">Notificaciones por SMS</span>
-                  <p class="text-sm text-neutral-600 dark:text-neutral-400">
-                    Enviar SMS cuando se detecte nivel crítico
-                  </p>
-                </div>
-              </label>
-
-              <!-- Teléfonos -->
-              <div v-if="notificacionesSMS" class="ml-7">
-                <label for="telefonos" class="block text-sm font-medium mb-2">
-                  Teléfonos de notificación
-                </label>
-                <input
-                  id="telefonos"
-                  v-model="telefonosNotificacion"
-                  type="text"
-                  placeholder="600123456, 600654321"
-                  class="w-full rounded-lg border-2 border-neutral-200 dark:border-white/20 
-                         bg-white dark:bg-white/5 px-4 py-2.5
-                         focus:border-[#0261F4] focus:outline-none focus:ring-4 focus:ring-[#0261F4]/10
-                         dark:focus:border-[#4A8CFF] dark:focus:ring-[#4A8CFF]/10"
-                  :class="errores.telefonos && 'border-red-500 dark:border-red-400'"
-                />
-                <p class="mt-1.5 text-sm text-neutral-600 dark:text-neutral-400">
-                  Separar múltiples números con comas
-                </p>
-                <p v-if="errores.telefonos" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                  {{ errores.telefonos }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Botones de acción -->
-        <div class="flex items-center justify-end gap-3">
           <button
             type="button"
-            @click="router.push('/')"
-            class="px-6 py-2.5 rounded-lg border-2 border-neutral-200 dark:border-white/20
-                   hover:bg-neutral-100 dark:hover:bg-white/5 transition-colors font-medium"
-          >
-            Cancelar
-          </button>
-          
-          <button
-            type="submit"
+            @click="guardarConfig"
             :disabled="!formularioValido || guardando"
-            class="px-6 py-2.5 rounded-lg bg-[#0261F4] text-white font-medium
-                   hover:bg-[#0251D4] transition-colors
+            class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold
+                   hover:bg-blue-700 transition-colors text-sm
                    disabled:opacity-50 disabled:cursor-not-allowed
                    inline-flex items-center gap-2"
           >
             <Save class="h-4 w-4" />
-            {{ guardando ? 'Guardando...' : 'Guardar Configuración' }}
+            {{ guardando ? 'Guardando...' : 'Guardar Cambios' }}
           </button>
         </div>
-      </form>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      
+      <div v-if="mensaje" class="mb-6 p-4 rounded-lg bg-emerald-50 text-emerald-700">
+        {{ mensaje }}
+      </div>
+      <div v-if="errorMensaje" class="mb-6 p-4 rounded-lg bg-red-50 text-red-700">
+        {{ errorMensaje }}
+      </div>
+
+      <div class="space-y-8">
+        
+        <section class="bg-white rounded-xl border border-slate-200 p-6">
+          <div class="flex items-center gap-3 mb-6">
+            <AlertTriangle class="h-5 w-5 text-amber-500" />
+            <h2 class="text-lg font-semibold text-slate-800">Umbrales de Alerta de Gasoil</h2>
+          </div>
+          
+          <div class="space-y-6">
+            <div class="grid md:grid-cols-3 gap-4 items-start">
+              <div class="md:col-span-1">
+                <label for="umbralAlerta" class="font-medium">Umbral de Alerta</label>
+                <p class="text-sm text-slate-500 mt-1">Advertencia cuando el nivel de un depósito sea inferior a este valor (en litros).</p>
+              </div>
+              <div class="md:col-span-2">
+                <input
+                  id="umbralAlerta"
+                  v-model.number="umbralAlerta"
+                  type="number" min="0" step="50"
+                  :class="[baseInputClass, errores.umbral ? errorInputClass : normalInputClass]"
+                />
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-4 items-start">
+              <div class="md:col-span-1">
+                <label for="umbralCritico" class="font-medium">Umbral Crítico</label>
+                <p class="text-sm text-slate-500 mt-1">Alerta crítica (con animación y sonido) cuando el nivel sea inferior.</p>
+              </div>
+              <div class="md:col-span-2">
+                <input
+                  id="umbralCritico"
+                  v-model.number="umbralCritico"
+                  type="number" min="0" step="50"
+                  :class="[baseInputClass, errores.umbral ? errorInputClass : normalInputClass]"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl border border-slate-200 p-6">
+          <div class="flex items-center gap-3 mb-6">
+            <Bell class="h-5 w-5 text-blue-600" />
+            <h2 class="text-lg font-semibold text-slate-800">Notificaciones</h2>
+          </div>
+          
+          <div class="space-y-6">
+            <div class="grid md:grid-cols-3 gap-4 items-start">
+              <div class="md:col-span-1">
+                <label class="font-medium">Sonido de alerta</label>
+                <p class="text-sm text-slate-500 mt-1">Reproducir un sonido cuando un depósito alcance el nivel crítico.</p>
+              </div>
+              <div class="md:col-span-2">
+                <button
+                  type="button"
+                  @click="sonidoHabilitado = !sonidoHabilitado"
+                  :class="sonidoHabilitado ? 'bg-blue-600' : 'bg-slate-200'"
+                  class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                  role="switch"
+                  :aria-checked="sonidoHabilitado"
+                >
+                  <span
+                    :class="sonidoHabilitado ? 'translate-x-5' : 'translate-x-0'"
+                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  ></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 </template>

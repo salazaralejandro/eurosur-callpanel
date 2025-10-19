@@ -1,21 +1,26 @@
-// src/router/index.ts (ejemplo)
-import { createRouter, createWebHistory } from 'vue-router'
-
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuth } from '@/features/auth/useAuth'
 
-const routes = [
-  { path: '/login', component: () => import('@/pages/Login.vue') },
-  { path: '/', component: () => import('@/pages/Dashboard.vue'), meta: { requiresAuth: true } },
+const routes: RouteRecordRaw[] = [
+  { path: '/login', name: 'login', component: () => import('@/pages/Login.vue'), meta: { hideHeader: true } },
+  { path: '/', name: 'dashboard', component: () => import('@/pages/Dashboard.vue'), meta: { requiresAuth: true } },
+  { path: '/calls', name: 'calls-dashboard', component: () => import('@/pages/CallsDashboard.vue'), meta: { requiresAuth: true } },
+  { path: '/gasoil', name: 'gasoil-dashboard', component: () => import('@/pages/GasoilDashboard.vue'), meta: { requiresAuth: true } },
+  { path: '/config', name: 'config', component: () => import('@/pages/Config.vue'), meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-router.beforeEach(async (to, _from, next) => {
+router.beforeEach((to) => {
   const { isAuthenticated, REQUIRE_LOGIN } = useAuth()
-  if (to.meta.requiresAuth && REQUIRE_LOGIN) {
-    if (!isAuthenticated.value) return next('/login')
+  const needsAuth = to.meta.requiresAuth || REQUIRE_LOGIN
+  if (needsAuth && !isAuthenticated.value && to.name !== 'login') {
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
-  next()
+  if (to.name === 'login' && isAuthenticated.value) {
+    return { path: (to.query.redirect as string) || '/' }
+  }
+  return true
 })
 
 export default router

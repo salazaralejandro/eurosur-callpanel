@@ -70,10 +70,10 @@ async function enterDemo() {
     <!-- LADO IZQUIERDO (branding) -->
     <aside
       class="hidden md:flex flex-col justify-between p-8 text-white"
-      style="background: radial-gradient(120% 120% at 0% 0%, #2B7BFF 0%, #0261F4 45%, #0B2C67 100%);"
+      style="background: #0261F4;"
     >
       <header class="flex items-center gap-3">
-        <img src="/eurosur-logo.svg" alt="Grupo Eurosur" class="h-8 w-auto" />
+        <img src="/eurosur-logo.svg" alt="Grupo Eurosur" class="h-10 w-auto brightness-0 invert" />
       </header>
 
       <div class="max-w-md">
@@ -87,7 +87,6 @@ async function enterDemo() {
         © 2025 Grupo Eurosur. Todos los derechos reservados.
       </footer>
     </aside>
-
     <!-- LADO DERECHO (formulario) -->
     <main class="flex items-center justify-center p-6 md:p-10">
       <div class="w-full max-w-md">
