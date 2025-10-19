@@ -111,13 +111,12 @@ const chartOptions: ChartOptions<'bar'> = {
         text: 'Litros',
         color: '#6b7280',
         font: {
-          weight: '500'
+          weight: 'bold'
         }
       },
       ticks: { color: '#6b7280' },
       grid: {
         color: '#e5e7eb',
-        borderDash: [4, 4]
       }
     },
     x: {
