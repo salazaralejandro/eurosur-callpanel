@@ -7,35 +7,32 @@ const route = useRoute()
 const router = useRouter()
 const { logout, user } = useAuth()
 
-/** Nav items centralizados (fácil de extender) */
-const nav = [
-  { to: '/', label: 'Inicio', exact: true },
-  { to: '/calls', label: 'Llamadas' },
-  { to: '/gasoil', label: 'Gasoil' }
+/** ÚNICO flyout: Paneles */
+const panels = [
+  { to: '/calls',  label: 'Panel de llamadas', description: 'KPIs, histórico y agentes' },
+  { to: '/gasoil', label: 'Panel de gasoil',   description: 'Depósitos, niveles y suministros' },
 ]
 
-/** Helpers de estado */
+/** Estado UI */
 const mobileOpen = ref(false)
 const userOpen = ref(false)
+const flyoutOpen = ref(false)
 const userInitial = computed(() => user.value?.email?.[0]?.toUpperCase() ?? 'U')
 
 function handleLogout () {
   logout()
   router.replace('/login')
 }
-
-/** Cerrar menús en navegación y clic fuera */
 function closeAll() {
   mobileOpen.value = false
   userOpen.value = false
+  flyoutOpen.value = false
 }
-
-/** Accesibilidad: ESC para cerrar menús */
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') closeAll()
 }
 
-/** Atajos de teclado: g c (calls), g g (gasoil) */
+/** Atajos: g c (calls), g g (gasoil) */
 let sequence = ''
 function shortcuts(e: KeyboardEvent) {
   if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return
@@ -54,57 +51,95 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', shortcuts)
 })
 
-/** Clases de enlace (activo/inactivo) accesibles */
+/** Helpers */
 function linkClasses(isActive: boolean) {
   return [
     'rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500',
-    isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+    isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
   ].join(' ')
 }
-
-/** Mostrar/ocultar separador activo en desktop */
-function isPathActive(to: string, exact = false) {
-  return exact ? route.path === to : route.path.startsWith(to)
+function isCurrent(path: string) {
+  return route.path.startsWith(path)
 }
 </script>
 
 <template>
-  <header class="sticky top-0 z-20 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-slate-200">
+  <header class="sticky top-0 z-20 border-b border-slate-200"
+          style="background-color: var(--color-slate-50)">
     <div class="mx-auto max-w-[1800px] px-4 sm:px-6">
-      <div class="flex h-16 items-center justify-between gap-4">
-        
-        <div class="flex items-center gap-4">
-          <RouterLink to="/" class="inline-flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-sm">
-            <img src="/eurosur-logo.svg" class="h-9 w-auto" alt="Grupo Eurosur" />
-            <span class="hidden md:inline text-lg font-medium text-slate-700">Panel de control</span>
-          </RouterLink>
-        </div>
+      <div class="flex h-16 items-center justify-center relative">
+        <!-- Logo centrado -->
+        <RouterLink 
+          to="/"
+          class="absolute left-1/2 -translate-x-1/2 inline-flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-sm"
+          aria-label="Ir al inicio"
+        >
+          <img src="/eurosur-logo.svg" class="h-9 w-auto" alt="Grupo Eurosur" />
+        </RouterLink>
 
-        <nav class="hidden md:flex items-center gap-2"> <RouterLink
-            v-for="item in nav"
-            :key="item.to"
-            :to="item.to"
-            custom
-            v-slot="{ href, navigate, isActive }"
-          >
-            <a
-              :href="href"
-              @click="navigate"
-              :class="linkClasses(isActive)"
-              :aria-current="isActive ? 'page' : undefined"
+        <!-- Navegación izquierda con ÚNICO flyout -->
+        <nav class="absolute left-0 hidden md:flex items-stretch gap-1">
+          <!-- Botón Paneles -->
+          <div class="relative" @mouseleave="flyoutOpen = false">
+            <button
+              type="button"
+              class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 inline-flex items-center gap-2"
+              @mouseenter="flyoutOpen = true"
+              @focus="flyoutOpen = true"
+              @click="flyoutOpen = !flyoutOpen"
+              :aria-expanded="flyoutOpen"
+              aria-haspopup="menu"
             >
-              {{ item.label }}
-            </a>
-          </RouterLink>
+              Paneles
+              <svg class="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+
+            <!-- Flyout -->
+            <transition
+              enter-active-class="transition ease-out duration-150"
+              enter-from-class="opacity-0 translate-y-1"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition ease-in duration-100"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 translate-y-1"
+            >
+              <div
+                v-if="flyoutOpen"
+                class="absolute left-0 mt-2 w-[340px] rounded-xl border border-slate-200 bg-white shadow-lg ring-1 ring-black/5 p-2"
+                role="menu"
+                @mouseenter="flyoutOpen = true"
+                @mouseleave="flyoutOpen = false"
+              >
+                <ul class="grid gap-1">
+                  <li v-for="item in panels" :key="item.to">
+                    <RouterLink :to="item.to" custom v-slot="{ href, navigate }">
+                      <a
+                        :href="href"
+                        @click="navigate"
+                        class="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        role="menuitem"
+                        :class="isCurrent(item.to) ? 'bg-blue-50 ring-1 ring-blue-100' : ''"
+                      >
+                        <div class="mt-0.5 h-2.5 w-2.5 rounded-full"
+                             :class="isCurrent(item.to) ? 'bg-blue-500' : 'bg-slate-300'"></div>
+                        <div class="min-w-0">
+                          <p class="text-sm font-medium text-slate-800 truncate">{{ item.label }}</p>
+                          <p v-if="item.description" class="text-xs text-slate-500 truncate">{{ item.description }}</p>
+                        </div>
+                      </a>
+                    </RouterLink>
+                  </li>
+                </ul>
+              </div>
+            </transition>
+          </div>
         </nav>
 
-        <div class="flex items-center gap-2">
-          
-          <div class="hidden lg:block text-xs text-slate-400 mr-2 select-none" title="Atajos: g c (Llamadas), g g (Gasoil)">
-            Atajos: <kbd class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">g</kbd><kbd class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-0.5">c</kbd>,
-            <kbd class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-1">g</kbd><kbd class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-0.5">g</kbd>
-          </div>
-
+        <!-- Menú usuario a la derecha -->
+        <div class="absolute right-0 flex items-center gap-2">
           <div class="relative">
             <button
               class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-lg font-semibold text-slate-700
@@ -128,14 +163,6 @@ function isPathActive(to: string, exact = false) {
               </div>
               <div class="h-px bg-slate-200"></div>
               <RouterLink
-                to="/"
-                class="block px-4 py-2 text-sm hover:bg-slate-50 text-slate-700"
-                role="menuitem"
-                @click="closeAll"
-              >
-                Ir al inicio
-              </RouterLink>
-              <RouterLink
                 to="/config"
                 class="block px-4 py-2 text-sm hover:bg-slate-50 text-slate-700"
                 role="menuitem"
@@ -154,9 +181,10 @@ function isPathActive(to: string, exact = false) {
             </div>
           </div>
 
+          <!-- Hamburguesa -->
           <button
-            class="md:hidden inline-flex items-center justify-center rounded-lg p-2 text-slate-600
-                   hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="md:hidden inline-flex items-center justify-center rounded-lg p-2 text-slate-700
+                   hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             @click="mobileOpen = !mobileOpen"
             :aria-expanded="mobileOpen"
             aria-controls="mobile-nav"
@@ -172,19 +200,16 @@ function isPathActive(to: string, exact = false) {
         </div>
       </div>
 
-      <div
-        v-show="mobileOpen"
-        id="mobile-nav"
-        class="md:hidden pb-3"
-      >
+      <!-- Mobile nav -->
+      <div v-show="mobileOpen" id="mobile-nav" class="md:hidden pb-3">
         <nav class="mt-1 grid gap-1">
+          <span class="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Paneles</span>
           <RouterLink
-            v-for="item in nav"
+            v-for="item in panels"
             :key="item.to"
             :to="item.to"
-            class="rounded-lg px-4 py-2 text-base font-semibold"
-            :class="isPathActive(item.to, item.exact) ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'"
-            :aria-current="isPathActive(item.to, item.exact) ? 'page' : undefined"
+            class="rounded-lg px-4 py-2 text-base font-semibold text-slate-800 hover:bg-slate-100 hover:text-slate-900"
+            :class="isCurrent(item.to) ? 'bg-blue-50 text-blue-700' : ''"
             @click="mobileOpen = false"
           >
             {{ item.label }}
