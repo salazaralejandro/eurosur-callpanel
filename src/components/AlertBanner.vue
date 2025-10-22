@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { AlertTriangle, X } from 'lucide-vue-next'
-import type { EstadoDeposito } from '@/features/gasoil/schemas'
+import type { EstadoDeposito } from '@/features/gasoil/useGasoil'
 
 const props = defineProps<{
   depositos: EstadoDeposito[]
   onClose?: () => void
 }>()
 
-const depositosCriticos = computed(() => 
-  props.depositos.filter(d => d.LITROS_ACTUALES < 200)
+const depositosCriticos = computed(() =>
+  // Comprueba que no sea null
+  props.depositos.filter(d => d.LITROS_ACTUALES != null && d.LITROS_ACTUALES < 200),
 )
 
 const severity = computed(() => {
@@ -40,15 +41,13 @@ const iconClass = computed(() => {
     role="alert"
   >
     <div class="flex items-start gap-[1vw]">
-      <!-- Icono -->
       <div class="flex-shrink-0">
-        <AlertTriangle 
+        <AlertTriangle
           class="h-[1.6vw] w-[1.6vw]"
           :class="iconClass"
         />
       </div>
 
-      <!-- Contenido -->
       <div class="flex-1">
         <h3 class="text-[1.1vw] font-semibold mb-[0.4vw]">
           <template v-if="severity === 'critical'">
@@ -58,7 +57,7 @@ const iconClass = computed(() => {
             Nivel bajo de combustible
           </template>
         </h3>
-        
+
         <div class="space-y-[0.3vw]">
           <div
             v-for="deposito in depositos"
@@ -66,17 +65,28 @@ const iconClass = computed(() => {
             class="text-[0.95vw]"
           >
             <span class="font-medium">{{ deposito.NOMBRE }}</span>:
-            <span 
+            <span
               class="font-bold tabular-nums"
-              :class="deposito.LITROS_ACTUALES < 200 ? 'text-red-700 dark:text-red-300' : ''"
+              :class="
+                deposito.LITROS_ACTUALES != null && deposito.LITROS_ACTUALES < 200
+                  ? 'text-red-700 dark:text-red-300'
+                  : ''
+              "
             >
-              {{ deposito.LITROS_ACTUALES.toFixed(1) }}L
+              {{
+                deposito.LITROS_ACTUALES != null
+                  ? deposito.LITROS_ACTUALES.toFixed(1)
+                  : '—'
+              }}L
             </span>
-            <span class="opacity-70">
+            <span
+              v-if="deposito.PORCENTAJE != null"
+              class="opacity-70"
+            >
               ({{ deposito.PORCENTAJE }}% de capacidad)
             </span>
             <span
-              v-if="deposito.LITROS_ACTUALES < 200"
+              v-if="deposito.LITROS_ACTUALES != null && deposito.LITROS_ACTUALES < 200"
               class="ml-[0.5vw] text-[0.8vw] font-semibold uppercase tracking-wide"
             >
               CRÍTICO
@@ -94,7 +104,6 @@ const iconClass = computed(() => {
         </p>
       </div>
 
-      <!-- Botón cerrar (opcional) -->
       <button
         v-if="onClose"
         @click="onClose"

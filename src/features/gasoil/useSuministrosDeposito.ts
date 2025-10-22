@@ -1,118 +1,95 @@
-import { computed } from 'vue'
-import { gasogesApi } from '@/utils/api'
 // src/features/gasoil/useSuministrosDeposito.ts
+import { computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
+import { z } from 'zod'
+import {
+  SuministroFromApi,
+  type Suministro as SuministroObject,
+} from './schema'
 
-/** ===== Tipos ===== */
-export type Suministro = {
-  ID_USUARIO?: number | null
-  ID_VEHICULO?: number | null
-  KM?: number | null
-  LITROS_SUMINISTRADOS: number
-  PRECIO?: number | null
-  FECHA_HORA: string
-  NUMERO_SERIE_SURTIDOR?: number | string | null
-}
-
+// ... (El tipo EstadoEstimado y ymd() no cambian) ...
 export type EstadoEstimado = {
   capacidad?: number | null
   stockInicial?: number | null
-  entradas?: number // reposiciones en el periodo (si las conoces)
-  consumos: number   // total suministrado (salidas)
-  stockEstimado: number | null // acotado a [0, capacidad]
+  entradas?: number
+  consumos: number
+  stockEstimado: number | null
   porcentaje: number | null
 }
-
-/** ===== Utilidades ===== */
 export function ymd(d = new Date()) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+// ...
 
-/** Normaliza un registro de suministro: acepta OBJETO o TUPLA (array) */
-function normalizeRow(raw: any): Suministro | null {
-  // Caso OBJETO
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    const litros = Number(
-      raw.LITROS_SUMINISTRADOS ??
-      raw['LITROS_SUMINISTRADOS'] ??
-      raw['litros'] ??
-      raw['LITROS']
-    )
-    if (!Number.isFinite(litros)) return null
-    const fecha =
-      raw.FECHA_HORA ?? raw['FECHA_HORA'] ?? raw['FECHA Y HORA'] ?? raw['fecha_hora'] ?? raw['fecha'] ?? ''
-    return {
-      ID_USUARIO: raw.ID_USUARIO ?? null,
-      ID_VEHICULO: raw.ID_VEHICULO ?? null,
-      KM: raw.KM ?? null,
-      LITROS_SUMINISTRADOS: litros,
-      PRECIO: raw.PRECIO != null ? Number(raw.PRECIO) : null,
-      FECHA_HORA: String(fecha),
-      NUMERO_SERIE_SURTIDOR: raw.NUMERO_SERIE_SURTIDOR ?? raw['NUMERO DE SERIE SURTIDOR'] ?? null,
-    }
+function apiTupleToSuministro(
+  row: z.infer<typeof SuministroFromApi>,
+): SuministroObject {
+  const [
+    id_usuario,
+    id_vehiculo,
+    km,
+    litros,
+    precio,
+    fecha_hora,
+    num_serie_surtidor,
+    id_deposito,
+    id_combustible,
+  ] = row
+
+  return {
+    ID_USUARIO: id_usuario,
+    ID_VEHICULO: id_vehiculo,
+    KM: km,
+    LITROS_SUMINISTRADOS: litros,
+    PRECIO: precio,
+    'FECHA Y HORA': fecha_hora,
+    NUMERO_DE_SERIE_SURTIDOR: num_serie_surtidor,
+    ID_DEPOSITO: id_deposito,
+    ID_COMBUSTIBLE: id_combustible,
   }
-
-  // Caso TUPLA (orden documentado)
-  // [0] ID_USUARIO, [1] ID_VEHICULO, [2] KM, [3] LITROS_SUMINISTRADOS, [4] PRECIO,
-  // [5] FECHA Y HORA, [6] NUMERO DE SERIE SURTIDOR, ... (ignorar resto si lo hubiera)
-  if (Array.isArray(raw)) {
-    const litros = Number(raw[3])
-    if (!Number.isFinite(litros)) return null
-    return {
-      ID_USUARIO: raw[0] ?? null,
-      ID_VEHICULO: raw[1] ?? null,
-      KM: raw[2] ?? null,
-      LITROS_SUMINISTRADOS: litros,
-      PRECIO: raw[4] != null ? Number(raw[4]) : null,
-      FECHA_HORA: raw[5] ? String(raw[5]) : '',
-      NUMERO_SERIE_SURTIDOR: raw[6] ?? null,
-    }
-  }
-
-  return null
 }
 
-/** ===== Hook: suministros de un depósito entre fechas =====
- * GET /v1/suministros/deposito/{ID}/{inicio}/{fin}
- */
 export function useSuministrosDeposito(
   depositoId: number | string,
   inicio: string,
   fin: string,
-  refetchMs = 60_000
+  refetchMs = 60_000,
 ) {
   return useQuery({
     queryKey: ['suministros-deposito', String(depositoId), inicio, fin],
     queryFn: async () => {
-      const res = await gasogesApi
-        .get(`suministros/deposito/${encodeURIComponent(String(depositoId))}/${encodeURIComponent(inicio)}/${encodeURIComponent(fin)}`)
-        .json<unknown>()
+      // --- CAMBIO: Usamos fetch a nuestro propio proxy ---
+      const params = new URLSearchParams({
+        id: String(depositoId),
+        inicio: inicio,
+        fin: fin,
+      })
+      const resReq = await fetch(`/api/suministros-deposito?${params.toString()}`)
+      if (!resReq.ok) {
+        throw new Error('Error al cargar /api/suministros-deposito')
+      }
+      const res = await resReq.json()
 
-      const raw: any[] =
-        Array.isArray(res) ? res
-        : (res && typeof res === 'object' && Array.isArray((res as any).data)) ? (res as any).data
-        : []
+      const rawTuples = SuministroFromApi.array().parse(res)
 
-      return raw
-        .map(normalizeRow)
-        .filter((r): r is Suministro => !!r)
-        .sort((a, b) => (a.FECHA_HORA < b.FECHA_HORA ? 1 : -1)) // recientes primero
+      return rawTuples
+        .map(apiTupleToSuministro)
+        .sort((a: SuministroObject, b: SuministroObject) =>
+          a['FECHA Y HORA'] < b['FECHA Y HORA'] ? 1 : -1,
+        )
     },
     refetchInterval: refetchMs,
     refetchIntervalInBackground: true,
     staleTime: Math.floor(refetchMs * 0.5),
-    initialData: [] as Suministro[],
+    initialData: [] as SuministroObject[],
     enabled: !!depositoId && !!inicio && !!fin,
   })
 }
 
-/** ===== Helper de estado estimado (opcional) =====
- * Calcula stockEstimado = stockInicial + entradas - consumos
- * Acota a [0, capacidad] si hay capacidad.
- */
+// ... (El resto del archivo: calcularEstadoEstimado, useEstadoDeposito, etc. no cambia) ...
 export function calcularEstadoEstimado(opts: {
   capacidad?: number | null
   stockInicial?: number | null
@@ -125,11 +102,9 @@ export function calcularEstadoEstimado(opts: {
   const consumos = Number(opts.consumos) || 0
 
   if (stockInicial == null && capacidad == null) {
-    // No podemos estimar sin al menos un punto de partida
     return { capacidad, stockInicial, entradas, consumos, stockEstimado: null, porcentaje: null }
   }
 
-  // Si no hay stockInicial pero sí capacidad, asumimos 0 por defecto
   const base = stockInicial ?? 0
   let estimado = base + entradas - consumos
   if (capacidad != null) {
@@ -150,13 +125,6 @@ export function calcularEstadoEstimado(opts: {
     porcentaje,
   }
 }
-
-/** ===== Composable de "estado de depósito" (cómodo para el Dashboard) =====
- * Lee suministros del depósito y devuelve:
- *  - totales del periodo
- *  - último suministro
- *  - estado estimado (si le pasas capacidad/stockInicial/entradas)
- */
 export function useEstadoDeposito(
   depositoId: number | string,
   inicio: string,
@@ -164,15 +132,15 @@ export function useEstadoDeposito(
   opciones?: {
     capacidad?: number | null
     stockInicial?: number | null
-    entradas?: number | null // reposiciones en el periodo
+    entradas?: number | null
     refetchMs?: number
-  }
+  },
 ) {
   const refetchMs = opciones?.refetchMs ?? 60_000
   const q = useSuministrosDeposito(depositoId, inicio, fin, refetchMs)
 
   const totalConsumos = computed(() =>
-    (q.data.value ?? []).reduce((a, s) => a + Number(s.LITROS_SUMINISTRADOS || 0), 0)
+    (q.data.value ?? []).reduce((a: number, s: SuministroObject) => a + Number(s.LITROS_SUMINISTRADOS || 0), 0),
   )
   const ultimo = computed(() => (q.data.value ?? [])[0] ?? null)
 
@@ -182,23 +150,16 @@ export function useEstadoDeposito(
       stockInicial: opciones?.stockInicial ?? null,
       entradas: opciones?.entradas ?? 0,
       consumos: totalConsumos.value,
-    })
+    }),
   )
 
   return {
     ...q,
-    totalConsumos, // litros totales suministrados en el rango
-    ultimo,        // último suministro (si hay)
-    estado,        // {capacidad, stockInicial, entradas, consumos, stockEstimado, porcentaje}
+    totalConsumos,
+    ultimo,
+    estado,
   }
 }
-
-/** ====== (Opcional) cargar capacidades/stock desde ENV ======
- * Puedes definir en .env.local:
- *   VITE_DEPOS_CAP='{"2":5000,"3":8000}'
- *   VITE_DEPOS_STOCK='{"2":3200}'
- *   VITE_DEPOS_ENTRADAS='{"2":0}'
- */
 export function getCapacidadesFromEnv(): Record<string, number> {
   try {
     const raw = import.meta.env.VITE_DEPOS_CAP

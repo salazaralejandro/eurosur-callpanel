@@ -1,55 +1,75 @@
+import {
+  DepositoFromApi,
+  DepositoNivelFromApi,
+} from './schema'
 // src/features/gasoil/useGasoil.ts
 import { computed, unref } from 'vue'
 
-import { gasogesApi } from '@/utils/api'
+import type { EstadoDeposito } from './schema'
+import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/vue-query'
+import { z } from 'zod'
+export type { EstadoDeposito } // Re-exportamos el tipo
 
-/** === Tipos (ajusta si ya los tienes) === */
-export type EstadoDeposito = {
-  ID_DEPOSITO: number
-  NOMBRE: string
-  CAPACIDAD: number | null
-  LITROS_ACTUALES: number | null
-  PORCENTAJE: number | null
-  ULTIMO_SUMINISTRO: string | null
-}
-
-/** === Intervalo por defecto (5 min) — override con VITE_GASOIL_REFETCH_MS === */
 const DEFAULT_REFETCH_MS = Number(import.meta.env.VITE_GASOIL_REFETCH_MS ?? 300000)
 
-/** === Normaliza /depositos que puede devolver formatos distintos === */
-function coerceDepositos(res: unknown): EstadoDeposito[] {
-  // objetos completos
-  if (Array.isArray(res) && res.length && typeof res[0] === 'object' && !Array.isArray(res[0])) {
-    return res as EstadoDeposito[]
-  }
-  // { data: [...] }
-  if (res && typeof res === 'object' && Array.isArray((res as any).data)) {
-    return (res as any).data as EstadoDeposito[]
-  }
-  // tuplas [id, nombre]
-  if (Array.isArray(res) && res.length && Array.isArray(res[0])) {
-    return (res as Array<[number | string, string]>).map(([id, name]) => ({
-      ID_DEPOSITO: Number(id),
-      NOMBRE: String(name),
-      CAPACIDAD: null,
-      LITROS_ACTUALES: null,
-      PORCENTAJE: null,
-      ULTIMO_SUMINISTRO: null,
-    }))
-  }
-  console.warn('Formato /depositos no reconocido:', res)
-  return []
-}
-
-/** === Hook principal: NO inventa datos, solo backend === */
 export function useDepositos(refetchMs = DEFAULT_REFETCH_MS) {
   return useQuery({
     queryKey: ['depositos'],
     queryFn: async () => {
       try {
-        const res = await gasogesApi.get('depositos').json<unknown>()
-        return coerceDepositos(res)
+        // --- 1. Obtener la lista de depósitos (del proxy) ---
+        const resListaReq = await fetch('/api/depositos')
+        if (!resListaReq.ok) throw new Error('Error en proxy /api/depositos')
+        const resLista = await resListaReq.json()
+
+        const depositosBase = DepositoFromApi.array().parse(resLista)
+        
+        if (depositosBase.length === 0) {
+          return [] as EstadoDeposito[]
+        }
+
+        // --- 2. Preparar las peticiones de nivel (del proxy) ---
+        const fechaHoraActual = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        const encodedFecha = encodeURIComponent(fechaHoraActual)
+
+        const peticionesDeNivel = depositosBase.map(async ([id, nombre]) => {
+          try {
+            const resNivelReq = await fetch('/api/deposito-nivel', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: id, fecha: encodedFecha }),
+            })
+            if (!resNivelReq.ok) throw new Error(`Error en proxy /api/deposito-nivel para id ${id}`)
+            const resNivel = await resNivelReq.json()
+              
+            const [litros] = DepositoNivelFromApi.parse(resNivel)
+
+            return {
+              ID_DEPOSITO: id,
+              NOMBRE: nombre,
+              LITROS_ACTUALES: Number.isFinite(litros) ? litros : null,
+              CAPACIDAD: null,
+              PORCENTAJE: null, 
+              ULTIMO_SUMINISTRO: null,
+            } as EstadoDeposito
+
+          } catch (errNivel) {
+            console.error(`Error al cargar nivel para depósito ${id} (${nombre}):`, errNivel)
+            return {
+              ID_DEPOSITO: id,
+              NOMBRE: nombre,
+              LITROS_ACTUALES: null,
+              CAPACIDAD: null,
+              PORCENTAJE: null,
+              ULTIMO_SUMINISTRO: null,
+            } as EstadoDeposito
+          }
+        })
+
+        const depositosCompletos = await Promise.all(peticionesDeNivel)
+        return depositosCompletos
+        
       } catch (err) {
         console.error('Error al cargar /depositos:', err)
         return [] as EstadoDeposito[]
@@ -61,7 +81,7 @@ export function useDepositos(refetchMs = DEFAULT_REFETCH_MS) {
   })
 }
 
-/** 🔁 Depósitos bajo nivel (<threshold) y críticos (<criticalThreshold) */
+// ... (El resto del archivo, useDepositosBajoNivel, no necesita cambios) ...
 export function useDepositosBajoNivel(
   threshold = 400,
   criticalThreshold = 200,
@@ -71,14 +91,13 @@ export function useDepositosBajoNivel(
 
   const depositosBajos = computed<EstadoDeposito[]>(() => {
     const depositos = unref(depositosRef) ?? []
-    // Solo consideramos los que vienen con litros numéricos
     return depositos.filter(
-      d => Number.isFinite(Number(d.LITROS_ACTUALES)) && Number(d.LITROS_ACTUALES) < threshold,
+      d => d.LITROS_ACTUALES != null && Number(d.LITROS_ACTUALES) < threshold,
     )
   })
 
   const criticalDeposits = computed<EstadoDeposito[]>(() =>
-    depositosBajos.value.filter(d => Number(d.LITROS_ACTUALES) < criticalThreshold),
+    depositosBajos.value.filter(d => d.LITROS_ACTUALES != null && Number(d.LITROS_ACTUALES) < criticalThreshold),
   )
 
   const hasLowLevel = computed<boolean>(() => depositosBajos.value.length > 0)
