@@ -68,7 +68,17 @@ export type EstadoDeposito = z.infer<typeof EstadoDeposito>
 
 // --- Sondas y Nivel ---
 export const SondaFromApi = z.tuple([z.string(), z.number(), z.string()])
-export const DepositoNivelFromApi = z.tuple([z.number()]).rest(z.unknown())
+
+// --- ¡CAMBIO AQUÍ PARA ARREGLAR ZODERROR! ---
+// 1. Define el array interno: Ej: [970] o ["970"] o [null]
+const InnerNivelArray = z.array(
+  z.union([z.number(), z.string()]).nullable()
+).optional() // Hacemos que el array interno sea opcional
+
+// 2. Define la respuesta externa: Ej: [[970]] o [] (array vacío)
+export const DepositoNivelFromApi = z.array(InnerNivelArray)
+// --- FIN DEL CAMBIO ---
+
 
 // --- Usuario ---
 export const UsuarioFromApi = z.tuple([

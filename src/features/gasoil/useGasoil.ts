@@ -1,15 +1,15 @@
 import {
   DepositoFromApi,
-  DepositoNivelFromApi,
+  DepositoNivelFromApi
 } from './schema'
 // src/features/gasoil/useGasoil.ts
 import { computed, unref } from 'vue'
 
-import type { EstadoDeposito } from './schema'
+import type { EstadoDeposito } from './schema.ts'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/vue-query'
 import { z } from 'zod'
-export type { EstadoDeposito } // Re-exportamos el tipo
+export type { EstadoDeposito }
 
 const DEFAULT_REFETCH_MS = Number(import.meta.env.VITE_GASOIL_REFETCH_MS ?? 300000)
 
@@ -18,7 +18,6 @@ export function useDepositos(refetchMs = DEFAULT_REFETCH_MS) {
     queryKey: ['depositos'],
     queryFn: async () => {
       try {
-        // --- 1. Obtener la lista de depósitos (del proxy) ---
         const resListaReq = await fetch('/api/depositos')
         if (!resListaReq.ok) throw new Error('Error en proxy /api/depositos')
         const resLista = await resListaReq.json()
@@ -29,26 +28,50 @@ export function useDepositos(refetchMs = DEFAULT_REFETCH_MS) {
           return [] as EstadoDeposito[]
         }
 
-        // --- 2. Preparar las peticiones de nivel (del proxy) ---
         const fechaHoraActual = dayjs().format('YYYY-MM-DD HH:mm:ss')
         const encodedFecha = encodeURIComponent(fechaHoraActual)
 
         const peticionesDeNivel = depositosBase.map(async ([id, nombre]) => {
           try {
-            const resNivelReq = await fetch('/api/deposito-nivel', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: id, fecha: encodedFecha }),
+            const params = new URLSearchParams({
+              id: String(id),
+              fecha: encodedFecha,
             })
-            if (!resNivelReq.ok) throw new Error(`Error en proxy /api/deposito-nivel para id ${id}`)
+            const resNivelReq = await fetch(`/api/depositos/nivel?${params.toString()}`)
+
+            if (!resNivelReq.ok) {
+               throw new Error(`Error en proxy /api/depositos/nivel para id ${id}. Status: ${resNivelReq.status}`)
+            }
+            
             const resNivel = await resNivelReq.json()
-              
-            const [litros] = DepositoNivelFromApi.parse(resNivel)
+
+            // --- ¡CAMBIO AQUÍ PARA PROCESAR EL ARRAY DOBLE! ---
+            // 1. Validamos con el schema flexible
+            const nivelOuterArray = DepositoNivelFromApi.parse(resNivel) // Ej: [[970]] o []
+            
+            // 2. Extraemos el array *interno* (puede ser undefined si nivelOuterArray está vacío)
+            const nivelInnerArray = nivelOuterArray[0] // Ej: [970] or undefined
+            
+            // 3. Extraemos el valor *crudo* del array interno (puede ser undefined)
+            const litrosRaw = nivelInnerArray ? nivelInnerArray[0] : undefined // Ej: 970, "970", null, o undefined
+
+            // 4. Convertimos el valor a número
+            let litros: number | null = null
+            if (typeof litrosRaw === 'number') {
+              litros = litrosRaw
+            } else if (typeof litrosRaw === 'string') {
+              const parsed = parseFloat(litrosRaw.replace(',', '.'))
+              if (Number.isFinite(parsed)) {
+                litros = parsed
+              }
+            }
+            // 'litros' permanece null si litrosRaw era null, undefined, o un string no numérico
+            // --- FIN DEL CAMBIO ---
 
             return {
               ID_DEPOSITO: id,
               NOMBRE: nombre,
-              LITROS_ACTUALES: Number.isFinite(litros) ? litros : null,
+              LITROS_ACTUALES: litros, // Usamos nuestro valor 'litros' ya parseado
               CAPACIDAD: null,
               PORCENTAJE: null, 
               ULTIMO_SUMINISTRO: null,
@@ -81,7 +104,7 @@ export function useDepositos(refetchMs = DEFAULT_REFETCH_MS) {
   })
 }
 
-// ... (El resto del archivo, useDepositosBajoNivel, no necesita cambios) ...
+// ... (useDepositosBajoNivel no cambia) ...
 export function useDepositosBajoNivel(
   threshold = 400,
   criticalThreshold = 200,
