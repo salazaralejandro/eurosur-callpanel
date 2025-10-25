@@ -1,20 +1,18 @@
+// /api/switch-flow.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-type ProviderFail = { status: number; statusText: string; bodyText: string }
-type Row = { pbx_id: string; success: boolean; provider?: ProviderFail }
+type ProviderResp =
+  | { status: 'success'; status_code: '00' | string; message: string; data?: any }
+  | { status: string; status_code?: string; message?: string; data?: any }
 
-async function callMundoSMS(
-  base: string,
-  path: string,
-  token: string,
-  clid: string,
-  flowId: string
-): Promise<{ ok: true } | { ok: false; fail: ProviderFail }> {
+async function setFlow({
+  base, path, token, did, flowId,
+}: { base: string; path: string; token: string; did: string; flowId: string }) {
   const url = `${base}${path}`
 
   const body = {
     method: 'POST',
-    clid, // PBX id
+    did, // <- IMPORTANTE: es "did", no "clid"
     change_parameter: 'id_diagramflow',
     change_value: flowId,
   }
@@ -28,9 +26,18 @@ async function callMundoSMS(
     body: JSON.stringify(body),
   })
 
-  if (res.ok) return { ok: true }
   const text = await res.text().catch(() => '')
-  return { ok: false, fail: { status: res.status, statusText: res.statusText, bodyText: text } }
+  let json: ProviderResp | null = null
+  try { json = JSON.parse(text) } catch {}
+
+  const okHTTP = res.ok
+  const okBusiness = json && (json as any).status === 'success'
+
+  return {
+    ok: okHTTP && !!okBusiness,
+    http: { status: res.status, statusText: res.statusText },
+    provider: json ?? text, // devolvemos lo que venga para depurar
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -40,7 +47,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ ok: false, error: 'Use mode=day|night' })
     }
 
-    // Variables
     const API_BASE  = process.env.PROVIDER_API_BASE || 'https://api.mundosms.es'
     const API_PATH  = process.env.PROVIDER_ASSIGN_PATH || '/APIV3/set_voipids'
     const API_TOKEN = process.env.PROVIDER_API_TOKEN
@@ -51,37 +57,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ ok: false, error: 'Faltan PROVIDER_API_TOKEN / FLOW_ID_DAY / FLOW_ID_NIGHT' })
     }
 
-    const single = (req.query.pbx as string) || ''
-    const pbxIds =
-      single
-        ? [single]
-        : (process.env.PBX_IDS || '')
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean)
+    const one = (req.query.pbx as string) || ''
+    const dids = one
+      ? [one]
+      : (process.env.PBX_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
 
-    if (!pbxIds.length) {
+    if (!dids.length) {
       return res.status(400).json({ ok: false, error: 'No hay PBX_IDS configuradas ni parámetro ?pbx=' })
     }
 
     const targetFlowId = mode === 'day' ? FLOW_DAY : FLOW_NIGHT
 
-    const results: Row[] = []
-    for (const pbx_id of pbxIds) {
+    const results: Array<{ pbx_id: string; success: boolean; http?: any; provider?: any }> = []
+
+    for (const did of dids) {
       try {
-        const r = await callMundoSMS(API_BASE, API_PATH, API_TOKEN, pbx_id, targetFlowId)
+        const r = await setFlow({ base: API_BASE, path: API_PATH, token: API_TOKEN, did, flowId: targetFlowId })
         if (r.ok) {
-          results.push({ pbx_id, success: true })
+          results.push({ pbx_id: did, success: true })
         } else {
-          console.error('[set_voipids] PBX', pbx_id, '→', r.fail.status, r.fail.statusText, r.fail.bodyText)
-          results.push({ pbx_id, success: false, provider: r.fail })
+          console.error('[set_voipids FAIL]', { did, r })
+          results.push({ pbx_id: did, success: false, http: r.http, provider: r.provider })
         }
       } catch (e: any) {
-        results.push({
-          pbx_id,
-          success: false,
-          provider: { status: 0, statusText: 'FETCH_ERROR', bodyText: String(e?.message || e) },
-        })
+        results.push({ pbx_id: did, success: false, provider: { error: String(e?.message || e) } })
       }
     }
 
