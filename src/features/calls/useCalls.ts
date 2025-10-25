@@ -40,9 +40,9 @@ function toKpis(calls: any[], windowSeconds = 60, agentActiveMinutes = 10): Call
   const activeAgents = new Set<string>()
 
   for (const c of calls) {
-    const start  = c?.date_start ? Date.parse(c.date_start.replace(' ', 'T')) : null
+    const start = c?.date_start ? Date.parse(c.date_start.replace(' ', 'T')) : null
     const answer = c?.date_answer ? Date.parse(c.date_answer.replace(' ', 'T')) : null
-    const end    = c?.date_end   ? Date.parse(c.date_end.replace(' ', 'T'))   : null
+    const end = c?.date_end ? Date.parse(c.date_end.replace(' ', 'T')) : null
     const status = String(c?.status ?? '')
 
     if (status === '1') {
@@ -63,38 +63,33 @@ function toKpis(calls: any[], windowSeconds = 60, agentActiveMinutes = 10): Call
 
 /**
  * KPIs de MundoSMS.
- * - POST + header Authorization (recomendado) por defecto.
- * - Si VITE_MUNDOSMS_USE_GET = '1', usa GET con json y Authorization en query (modo prueba).
+ * Llama al proxy seguro /api/voip.calls
  */
 export function useCallsKpis(refetchMs = 5000, windowSeconds = 60, agentActiveMinutes = 10) {
-  const endpoint = import.meta.env.VITE_MUNDOSMS_CALLS_ENDPOINT || 'APIv3/list_voipcalls'
-  const useGet = import.meta.env.VITE_MUNDOSMS_USE_GET === '1'
-  const token = import.meta.env.VITE_MUNDOSMS_TOKEN
+  // ❌ ELIMINADAS las variables 'endpoint', 'useGet' y 'token'.
+  // El frontend ya no necesita saber nada de esto.
 
   return useQuery({
-    queryKey: ['mundosms-calls', ymd(new Date()), useGet ? 'GET' : 'POST'],
+    queryKey: ['mundosms-calls', ymd(new Date())],
     queryFn: async () => {
-      const body = {
-        metodo: 'POST',
+      // Parámetros que enviaremos a nuestro proxy /api/voip.calls
+      // Tu proxy los reenviará a MundoSMS
+      const searchParams = {
         type: 'in',
-        from_datetime: '',   // si quieres desde hoy, usa: ymd(new Date())
+        from_datetime: '', // si quieres desde hoy, usa: ymd(new Date())
         from_id: '',
         showall: '0',
       }
 
-      let res: any
-      if (useGet) {
-        // MODO PRUEBA (como tu enlace)
-        res = await mundosmsApi.get(endpoint, {
-          searchParams: {
-            json: JSON.stringify(body),
-            Authorization: `Bearer ${token ?? ''}`,
-          },
-        }).json<any>()
-      } else {
-        // MODO RECOMENDADO
-        res = await mundosmsApi.post(endpoint, { json: body }).json<any>()
-      }
+      // ✅ MODO SEGURO:
+      // 1. Llama a 'voip.calls' (el nombre de tu archivo /api/voip.calls.ts)
+      // 2. 'mundosmsApi' tiene prefixUrl: '/api', por lo que la URL real es '/api/voip.calls'
+      // 3. Usa 'GET' con 'searchParams', que es como tu proxy está diseñado
+      const res = await mundosmsApi
+        .get('voip.calls', {
+          searchParams,
+        })
+        .json<any>()
 
       const calls = parseCalls(res)
       return toKpis(calls, windowSeconds, agentActiveMinutes)
