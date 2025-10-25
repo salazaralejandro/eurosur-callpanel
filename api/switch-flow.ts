@@ -1,3 +1,5 @@
+// /api/switch_flow.ts (ACTUALIZADO para usar GET)
+
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 type ProviderJson = {
@@ -27,8 +29,7 @@ async function setFlow({
   did: string
   flowId: string
 }) {
-  const url = `${base}${path}`
-
+  // 1. Creamos el body JSON que espera MundoSMS
   const body = {
     // 👇 MundoSMS usa "metodo" en español, no "method"
     metodo: 'POST',
@@ -37,15 +38,20 @@ async function setFlow({
     change_value: flowId,
   }
 
+  // 2. Creamos los parámetros de la URL
+  const params = new URLSearchParams()
+  params.set('json', JSON.stringify(body))
+  params.set('Authorization', `Bearer ${token}`)
+
+  // 3. Construimos la URL final con los parámetros
+  const url = `${base}${path}?${params.toString()}`
+
+  // 4. Hacemos la llamada como un GET, sin cabeceras y sin body
   const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
+    method: 'GET',
   })
 
+  // El resto de la lógica para leer la respuesta es igual
   const text = await res.text().catch(() => '')
   let json: ProviderJson | null = null
   try {
@@ -93,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const dids = single
       ? [single]
       : (process.env.PBX_IDS || '')
-          .split(',')
+          .split(/[\s,]+/) // Usamos regex para separar por comas o espacios
           .map((s) => s.trim())
           .filter(Boolean)
 

@@ -1,3 +1,4 @@
+// features/useCalls.ts (ACTUALIZADO Y SEGURO)
 import { mundosmsApi } from '@/utils/api'
 import { useQuery } from '@tanstack/vue-query'
 
@@ -61,30 +62,22 @@ function toKpis(calls: any[], windowSeconds = 60, agentActiveMinutes = 10): Call
   return { waiting_now, answered_today, agents_online: activeAgents.size }
 }
 
-/**
- * KPIs de MundoSMS.
- * Llama al proxy seguro /api/voip.calls
- */
-export function useCallsKpis(refetchMs = 5000, windowSeconds = 60, agentActiveMinutes = 10) {
-  // ❌ ELIMINADAS las variables 'endpoint', 'useGet' y 'token'.
-  // El frontend ya no necesita saber nada de esto.
 
+export function useCallsKpis(refetchMs = 5000, windowSeconds = 60, agentActiveMinutes = 10) {
   return useQuery({
     queryKey: ['mundosms-calls', ymd(new Date())],
     queryFn: async () => {
-      // Parámetros que enviaremos a nuestro proxy /api/voip.calls
-      // Tu proxy los reenviará a MundoSMS
+      
       const searchParams = {
         type: 'in',
-        from_datetime: '', // si quieres desde hoy, usa: ymd(new Date())
+        from_datetime: '', 
         from_id: '',
         showall: '0',
       }
 
       // ✅ MODO SEGURO:
-      // 1. Llama a 'voip.calls' (el nombre de tu archivo /api/voip.calls.ts)
-      // 2. 'mundosmsApi' tiene prefixUrl: '/api', por lo que la URL real es '/api/voip.calls'
-      // 3. Usa 'GET' con 'searchParams', que es como tu proxy está diseñado
+      // Llama a 'voip.calls' (el nombre de tu archivo /api/voip.calls.ts)
+      // mundosmsApi (de utils/api.ts) añade el prefijo '/api'
       const res = await mundosmsApi
         .get('voip.calls', {
           searchParams,
