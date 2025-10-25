@@ -57,3 +57,5 @@ export const mundosmsApi = ky.create({
 
 // Alias si en alguna parte antigua se usa `api`
 export const api = gasogesApi
+
+
