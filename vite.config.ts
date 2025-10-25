@@ -6,11 +6,13 @@ import tailwind from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig(({ mode }) => {
-  
   const env = loadEnv(mode, process.cwd(), '')
   const basicAuthToken = Buffer.from(
     `${env.VITE_GASOGES_USERNAME}:${env.VITE_GASOGES_PASSWORD}`
   ).toString('base64')
+
+  // URL donde corre 'vercel dev' (tus APIs /api/voip.calls.ts, etc.)
+  const VERCEL_DEV_URL = 'http://localhost:3000' // O el puerto que uses
 
   return {
     plugins: [vue(), tailwind()],
@@ -18,20 +20,37 @@ export default defineConfig(({ mode }) => {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
     server: {
-      port: 3173, // Tu puerto
+      port: 3173, // Tu puerto de frontend
       proxy: {
-        // Tu proxy de SMS
+        // --- Proxy 1: MundoSMS (Seguro) ---
+        // utils/api.ts (mundosmsApi) llama a '/smsapi/voip.calls'
         '/smsapi': {
-          target: 'https://api.mundosms.es',
+          target: VERCEL_DEV_URL, // Apunta a tu backend de Vercel
           changeOrigin: true,
-          rewrite: p => p.replace(/^\/smsapi/, ''),
+          // Reescribe: /smsapi/voip.calls -> /api/voip.calls
+          rewrite: path => path.replace(/^\/smsapi/, '/api'),
+          // No se añade token aquí. Se añade en /api/voip.calls.ts
         },
 
-        // --- ¡CAMBIOS EN EL PROXY DE API! ---
-        // (Deben ir DE MÁS ESPECÍFICO A MÁS GENÉRICO)
+        // --- Proxy 2: Gasoges (Seguro) ---
+        // utils/api.ts (gasogesApi) llama a '/gasoapi/depositos'
+        '/gasoapi': {
+          target: env.VITE_GASOGES_API_URL, // Apunta a Gasoges
+          changeOrigin: true,
+          // Reescribe: /gasoapi/depositos -> /depositos
+          rewrite: path => path.replace(/^\/gasoapi/, ''),
+          headers: {
+            'Authorization': `Basic ${basicAuthToken}`,
+          },
+        },
 
-        // 1. PROXY ESPECÍFICO (para /api/depositos/nivel)
-        '/api/depositos/nivel': {
+        // --- NOTA ---
+        // Ya NO necesitas los proxies específicos '/api/depositos/nivel'
+        // porque tu 'utils/api.ts' ahora usa '/gasoapi' y
+        // tu backend (/api/gasoges.ts) debe manejar esa lógica de rewrite.
+        
+        // Si quieres mantener la lógica de rewrite en Vite (solo para dev):
+        '/gasoapi/depositos/nivel': {
           target: env.VITE_GASOGES_API_URL,
           changeOrigin: true,
           headers: { 'Authorization': `Basic ${basicAuthToken}` },
@@ -42,13 +61,10 @@ export default defineConfig(({ mode }) => {
             return `/depositos/nivel/${id}/${fecha}`
           },
         },
-        
-        // 2. ¡NUEVO! PROXY ESPECÍFICO (para /api/suministros)
-        '/api/suministros': {
+        '/gasoapi/suministros': {
           target: env.VITE_GASOGES_API_URL,
           changeOrigin: true,
           headers: { 'Authorization': `Basic ${basicAuthToken}` },
-          // Reescribe la URL de GET ?inicio=...&fin=... a /suministros/todos/.../...
           rewrite: (path) => {
             const params = new URLSearchParams(path.split('?')[1])
             const inicio = params.get('inicio')
@@ -56,16 +72,6 @@ export default defineConfig(({ mode }) => {
             return `/suministros/todos/${inicio}/${fin}`
           },
         },
-        
-        // 3. PROXY GENÉRICO (para /api/depositos, /api/usuarios, /api/vehiculos)
-        '/api': {
-          target: env.VITE_GASOGES_API_URL, 
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
-          headers: {
-            'Authorization': `Basic ${basicAuthToken}`
-          }
-        }
       },
     },
   }
