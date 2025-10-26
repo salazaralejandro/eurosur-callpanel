@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestow - Layout Redimensionable (50 Órdenes)</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+    <script src="https://unpkg.com/split.js/dist/split.min.js"></script>
+
+    <style>
+        /* --- 1. Configuración General --- */
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8f9fa;
+            overflow: hidden;
+        }
+
+        /* --- 2. Barra de Navegación Superior --- */
+        #top-nav {
+            height: 50px; width: 100%; background-color: #343a40; color: white;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 1rem; box-sizing: border-box;
+            border-bottom: 3px solid #007bff;
+            z-index: 1100; position: relative;
+        }
+        #top-nav h1 { font-size: 1.25rem; margin: 0; font-weight: 500; }
+        #mobile-toggle {
+            display: none; background: none; border: 1px solid #6c757d;
+            color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem;
+            font-size: 1rem; cursor: pointer;
+        }
+
+        /* --- 3. Contenedor Principal de la App --- */
+        #app-layout {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+
+        /* --- 4. Barra Lateral Izquierda (Grúas) --- */
+        #sidebar {
+            flex-shrink: 0; background-color: #ffffff;
+            border-right: 1px solid #dee2e6;
+            display: flex; flex-direction: column;
+            padding: 1rem; box-sizing: border-box;
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        #sidebar h2 { font-size: 1.1rem; font-weight: 600; margin: 0 0 1rem 0; }
+        #search-gruas {
+            width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #ced4da;
+            border-radius: 0.25rem; box-sizing: border-box; margin-bottom: 1rem;
+        }
+        .filter-buttons { display: flex; margin-bottom: 1rem; }
+        .filter-buttons button {
+            flex: 1; padding: 0.5rem; border: 1px solid #007bff;
+            background-color: #fff; color: #007bff; cursor: pointer;
+        }
+        .filter-buttons button.active { background-color: #007bff; color: #fff; }
+        .filter-buttons button:first-child { border-radius: 0.25rem 0 0 0.25rem; }
+        .filter-buttons button:last-child { border-radius: 0 0.25rem 0.25rem 0; }
+        
+        #gruas-list {
+            list-style: none; padding: 0; margin: 0;
+            flex-grow: 1;
+        }
+        #gruas-list li {
+            padding: 0.85rem 1rem; border-bottom: 1px solid #f0f0f0;
+            cursor: pointer; display: flex; justify-content: space-between;
+            align-items: center; font-size: 0.9rem;
+        }
+        #gruas-list li:hover { background-color: #f8f9fa; }
+        #gruas-list li.highlighted { background-color: #c0e0ff; font-weight: bold; }
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            margin-left: 10px; flex-shrink: 0;
+        }
+
+        /* --- 5. Área de Contenido Principal (Mapa + Tabla) --- */
+        #main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 100%; 
+        }
+
+        /* --- 6. Contenedor del Mapa --- */
+        #map-container {
+            position: relative;
+            background-color: #e9ecef;
+            overflow: hidden;
+        }
+
+        /* --- 7. Contenedor de la Tabla --- */
+        #table-container {
+            background-color: #ffffff;
+            padding: 1rem; box-sizing: border-box;
+            overflow: auto; /* IMPORTANTE: Esto añade scroll a la tabla */
+        }
+        #table-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 1rem;
+        }
+        #table-header h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6; white-space: nowrap; }
+        th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
+        .status-badge {
+            padding: 0.25em 0.6em; border-radius: 10rem;
+            font-size: 0.8em; font-weight: 600;
+        }
+        .status-pendiente {
+            background-color: #e6f7ff; color: #007bff;
+            border: 1px solid #b3e0ff;
+        }
+        .status-finalizada {
+            background-color: #fff4e6; color: #fd7e14;
+            border: 1px solid #ffe0b3;
+        }
+        .status-en-curso {
+            background-color: #e6fff0; color: #28a745;
+            border: 1px solid #b3ffc6;
+        }
+
+
+        /* --- 8. ESTILOS DE LOS ICONOS DEL MAPA --- */
+        .truck-marker-wrapper { position: relative; }
+        .truck-label {
+            position: absolute; bottom: 30px; left: 50%;
+            transform: translateX(-50%);
+            background-color: #fff; color: #212529; border: 1px solid #ccc;
+            border-radius: 3px; padding: 1px 4px; font-size: 9px;
+            font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            white-space: nowrap;
+        }
+        .truck-marker-circle {
+            position: absolute; bottom: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 26px; height: 26px; border-radius: 50%;
+            border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            display: flex; align-items: center; justify-content: center;
+            color: white;
+        }
+        .truck-icon { font-size: 13px; transition: transform 0.5s linear; }
+        .status-busy { background-color: #dc3545; }
+        .status-free { background-color: #28a745; }
+        .status-offline { background-color: #6c757d; opacity: 0.7; }
+        .truck-marker-circle.highlighted { animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 123, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
+        }
+
+        /* --- 9. RESPONSIVE --- */
+        @media (max-width: 768px) {
+            #mobile-toggle { display: block; }
+            #app-layout { display: block; height: calc(100vh - 50px); position: relative; }
+            #sidebar {
+                position: absolute; left: 0; top: 0; height: 100%;
+                width: 300px; transform: translateX(-100%);
+                box-shadow: 4px 0 10px rgba(0,0,0,0.2);
+            }
+            #sidebar.is-open { transform: translateX(0); }
+            #main-content { height: 100%; }
+            #map-container { flex-basis: 40vh; }
+            #table-container { flex-grow: 1; }
+        }
+
+        /* --- 10. Estilos para los divisores (Split.js) --- */
+        .gutter {
+            background-color: #f1f1f1;
+            background-repeat: no-repeat;
+            background-position: 50%;
+            z-index: 999;
+        }
+        .gutter.gutter-horizontal {
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bM/5+BggHkF8igwMDRYIYzE1kZAGPGHwEAHQoWNOTsQDcAAAAASUVORK5CYII=');
+            cursor: col-resize;
+            border-left: 1px solid #ddd;
+            border-right: 1px solid #ddd;
+        }
+        .gutter.gutter-vertical {
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAFAQMAAABo7865AAAABlBMVEVHcEzMzMzyAv2sAAAAAXRSTlMAQObYZgAAABBJREFUeF5jOAMEEAIEgQAGQAYAVbM/s0PqL0gAAAAASUVORK5CYII=');
+            cursor: row-resize;
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+        }
+        @media (max-width: 768px) {
+            .gutter {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <nav id="top-nav">
+        <button id="mobile-toggle">
+            <i class="fa-solid fa-bars"></i> Grúas
+        </button>
+        <h1>GESTOW</h1>
+        <div></div>
+    </nav>
+
+    <div id="app-layout">
+        <aside id="sidebar">
+            <h2>Grúas</h2>
+            <input type="search" id="search-gruas" placeholder="Buscar por matrícula, dispositivo...">
+            <div class="filter-buttons">
+                <button class="active">Todas</button>
+                <button>Libres</button>
+                <button>Ocupadas</button>
+            </div>
+            <ul id="gruas-list"></ul>
+        </aside>
+
+        <main id="main-content">
+            <section id="map-container"></section>
+            <section id="table-container">
+                <div id="table-header">
+                    <h2>Órdenes de Trabajo</h2>
+                    <div>
+                        <select><option>Todos los estados</option></select>
+                        <select><option>Todas las empresas</option></select>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th><th>Compañía</th><th>Empleado</th><th>Vehículo</th><th>Ubicación</th><th>Estado</th><th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+        </main>
+    </div> 
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. LÓGICA DEL MAPA (50 Grúas) ---
+            const malagaCoords = [36.7213, -4.4215];
+            const map = L.map('map-container').setView(malagaCoords, 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            const truckListEl = document.getElementById('gruas-list');
+            const searchInput = document.getElementById('search-gruas');
+            
+            const truckMarkers = {};
+            let highlightedMarker = null;
+            let highlightedListItem = null;
+
+            const markers = L.markerClusterGroup();
+            
+            const statuses = ['busy', 'free', 'offline'];
+            const names = ['José Martín', 'Ana López', 'Carlos Ruiz', 'Lucía Fernández', 'Miguel Santos'];
+            
+            for (let i = 0; i < 50; i++) {
+                const id = `EU${100 + i}`;
+                const status = statuses[i % 3];
+                const name = names[i % 5];
+                const lat = malagaCoords[0] + (Math.random() - 0.5) * 0.1;
+                const lng = malagaCoords[1] + (Math.random() - 0.5) * 0.1;
+                const direction = Math.floor(Math.random() * 360);
+
+                const iconHtml = `
+                    <div class="truck-label">${id}</div>
+                    <div class="truck-marker-circle status-${status}">
+                        <i class="fa-solid fa-location-arrow truck-icon" style="transform: rotate(${direction - 45}deg);"></i>
+                    </div>
+                `;
+                
+                const customIcon = L.divIcon({
+                    html: iconHtml,
+                    className: 'truck-marker-wrapper',
+                    iconSize: [40, 46],
+                    iconAnchor: [20, 46]
+                });
+
+                const marker = L.marker([lat, lng], { icon: customIcon });
+                marker.bindPopup(`<h3>${id} - ${name}</h3><p>Estado: <strong>${status}</strong></p>`);
+                
+                marker.truckId = id; 
+                markers.addLayer(marker);
+                truckMarkers[id] = marker;
+
+                const li = document.createElement('li');
+                li.dataset.truckId = id;
+                li.innerHTML = `
+                    <span><b>${id}</b> - ${name}</span>
+                    <span class="status-dot status-${status}"></span>
+                `;
+                truckListEl.appendChild(li);
+            }
+            map.addLayer(markers);
+
+            // --- Lógica de Sincronización (sin cambios) ---
+            truckListEl.addEventListener('click', (e) => {
+                const li = e.target.closest('li');
+                if (!li) return;
+                const id = li.dataset.truckId;
+                highlightItem(id);
+                markers.zoomToShowLayer(truckMarkers[id], () => {
+                    truckMarkers[id].openPopup();
+                });
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('is-open');
+                }
+            });
+            markers.on('click', (e) => {
+                const id = e.layer.truckId;
+                highlightItem(id);
+            });
+            searchInput.addEventListener('input', (e) => {
+                const filter = e.target.value.toLowerCase();
+                document.querySelectorAll('#gruas-list li').forEach(li => {
+                    li.style.display = li.textContent.toLowerCase().includes(filter) ? 'flex' : 'none';
+                });
+            });
+
+            function highlightItem(id) {
+                if (highlightedMarker) {
+                    const oldCircle = highlightedMarker.getElement().querySelector('.truck-marker-circle');
+                    if (oldCircle) oldCircle.classList.remove('highlighted');
+                }
+                if (highlightedListItem) {
+                    highlightedListItem.classList.remove('highlighted');
+                }
+                const marker = truckMarkers[id];
+                if (marker && marker.getElement()) {
+                    const circle = marker.getElement().querySelector('.truck-marker-circle');
+                    if (circle) circle.classList.add('highlighted');
+                    highlightedMarker = marker;
+                }
+                const listItem = truckListEl.querySelector(`li[data-truck-id="${id}"]`);
+                if (listItem) {
+                    listItem.classList.add('highlighted');
+                    listItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    highlightedListItem = listItem;
+                }
+            }
+            
+            // --- 2. LÓGICA RESPONSIVE (Móvil) ---
+            const toggleBtn = document.getElementById('mobile-toggle');
+            const sidebar = document.getElementById('sidebar');
+
+            toggleBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('is-open');
+                setTimeout(() => map.invalidateSize(), 350);
+            });
+            
+            document.getElementById('main-content').addEventListener('click', () => {
+                if(sidebar.classList.contains('is-open')) {
+                    sidebar.classList.remove('is-open');
+                }
+            });
+
+            
+            // --- 3. Lógica de Paneles Redimensionables ---
+            let horizontalSplit = null;
+            let verticalSplit = null;
+            const mobileBreakpoint = 768;
+
+            function setupSplits() {
+                const sidebarStyle = window.getComputedStyle(sidebar);
+
+                if (window.innerWidth > mobileBreakpoint) {
+                    sidebar.style.transform = 'translateX(0)';
+                    sidebar.style.position = 'relative';
+
+                    if (!horizontalSplit) {
+                        horizontalSplit = Split(['#sidebar', '#main-content'], {
+                            sizes: [25, 75], minSize: [300, 400], gutterSize: 8,
+                            cursor: 'col-resize',
+                            onDragEnd: () => map.invalidateSize()
+                        });
+                    }
+                    if (!verticalSplit) {
+                        verticalSplit = Split(['#map-container', '#table-container'], {
+                            direction: 'vertical',
+                            sizes: [45, 55], minSize: [150, 150], gutterSize: 8,
+                            cursor: 'row-resize',
+                            onDragEnd: () => map.invalidateSize()
+                        });
+                    }
+                } else {
+                    if (horizontalSplit) {
+                        horizontalSplit.destroy();
+                        horizontalSplit = null;
+                    }
+                    if (verticalSplit) {
+                        verticalSplit.destroy();
+                        verticalSplit = null;
+                    }
+                    
+                    sidebar.style.width = null;
+                    sidebar.style.transform = sidebarStyle.transform;
+                    sidebar.style.position = sidebarStyle.position;
+                    
+                    document.getElementById('map-container').style.height = null;
+                    document.getElementById('table-container').style.height = null;
+                }
+                
+                map.invalidateSize();
+            }
+
+            // --- 4. NUEVO: Lógica para rellenar la tabla ---
+            const tableBody = document.querySelector("#table-container tbody");
+            const orderStatuses = [
+                { class: 'status-pendiente', text: 'Pendiente Asignación' },
+                { class: 'status-finalizada', text: 'Carga Finalizada' },
+                { class: 'status-en-curso', text: 'En Curso' }
+            ];
+            const companies = ['Euro Asistance', 'RACE', 'AXA Assistance', 'Mapfre'];
+            const employees = ['JOSÉ CRISTOBAL MARTIN', 'ANA LÓPEZ', 'CARLOS RUIZ', 'LUCÍA FERNÁNDEZ'];
+            const vehicles = ['7821FGH', '1234ABC', '9876XYZ', '5544GTR'];
+            const locations = ['Av. José Ortega y Gasset, Km 9', 'Av. Los Manantiales, 22', 'Calle Larios, 5', 'Aeropuerto de Málaga', 'Parque Tecnológico'];
+
+            let tableHtml = '';
+            for (let i = 0; i < 50; i++) { // Genera 50 órdenes
+                const orderId = `#${Math.floor(Math.random() * 100)}/${i + 1}`;
+                const company = companies[i % companies.length];
+                const employee = employees[i % employees.length];
+                const vehicle = vehicles[i % vehicles.length];
+                const location = locations[i % locations.length];
+                const status = orderStatuses[i % orderStatuses.length];
+
+                tableHtml += `
+                    <tr>
+                        <td>${orderId}</td>
+                        <td>${company}</td>
+                        <td>${employee}</td>
+                        <td>${vehicle}</td>
+                        <td>${location}</td>
+                        <td><span class="status-badge ${status.class}">${status.text}</span></td>
+                        <td><i class="fa-solid fa-pencil"></i> <i class="fa-solid fa-eye"></i></td>
+                    </tr>
+                `;
+            }
+            tableBody.innerHTML = tableHtml; // Inserta las filas en la tabla
+
+            // --- Inicialización final ---
+            setupSplits();
+            window.addEventListener('resize', setupSplits);
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 500);
+
+        });
+    </script>
+</body>
+</html>
