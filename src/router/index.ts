@@ -6,6 +6,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/', name: 'dashboard', component: () => import('@/pages/Dashboard.vue'), meta: { requiresAuth: true } },
   { path: '/calls', name: 'calls-dashboard', component: () => import('@/pages/CallsDashboard.vue'), meta: { requiresAuth: true } },
   { path: '/gasoil', name: 'gasoil-dashboard', component: () => import('@/pages/GasoilDashboard.vue'), meta: { requiresAuth: true } },
+  { path: '/contacts', name: 'contacts', component: () => import('@/pages/Contacts.vue'), meta: { requiresAuth: true } },
   { path: '/config', name: 'config', component: () => import('@/pages/Config.vue'), meta: { requiresAuth: true } },
 ]
 
