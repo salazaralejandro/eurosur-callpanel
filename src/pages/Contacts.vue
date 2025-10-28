@@ -31,6 +31,12 @@ import {
   BookUser,
 } from 'lucide-vue-next'
 
+// --- Declaraciones para el compilador de Vercel ---
+// Le decimos a TypeScript que estas variables globales existirán en el entorno de ejecución
+declare const __app_id: string | undefined
+declare const __firebase_config: string | undefined
+declare const __initial_auth_token: string | undefined
+
 // --- Tipos de Datos ---
 type Contact = {
   id: string
@@ -75,7 +81,7 @@ onMounted(() => {
     app = initializeApp(firebaseConfig)
     auth = getAuth(app)
     db = getFirestore(app)
-    setLogLevel('Debug')
+    setLogLevel('debug') // <-- CORREGIDO: 'Debug' a 'debug'
     contactsCollectionPath = `artifacts/${appId}/public/data/contacts`
 
     // Escuchar cambios de autenticación
@@ -419,7 +425,7 @@ async function handleDelete(id: string) {
                 >Teléfono</label
               >
               <input
-                v-model="currentContact.phone"
+                vD-model="currentContact.phone"
                 id="phone"
                 type="tel"
                 required
