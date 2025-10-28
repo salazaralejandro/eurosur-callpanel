@@ -67,7 +67,6 @@ import { Phone, Fuel, ChevronRight, BookUser } from 'lucide-vue-next'
         </div>
       </RouterLink>
 
-      <!-- Card: Contactos (NUEVA) -->
       <RouterLink
         to="/contacts"
         class="group block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm ring-offset-2 transition-all
