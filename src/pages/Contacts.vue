@@ -1,455 +1,390 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
-import { initializeApp, type FirebaseApp } from 'firebase/app'
-import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged,
-  type Auth,
-} from 'firebase/auth'
-import {
-  getFirestore,
-  collection,
-  query,
-  onSnapshot,
-  addDoc,
-  setDoc,
-  deleteDoc,
-  doc,
-  type Firestore,
-  setLogLevel,
-} from 'firebase/firestore'
-import {
-  Search,
-  Plus,
-  Edit,
-  Trash2,
-  X,
-  Save,
-  Loader2,
-  BookUser,
-} from 'lucide-vue-next'
+import { ref, computed, onMounted, watch } from 'vue'
 
-// --- Tipos de Datos ---
 type Contact = {
   id: string
-  firstName: string
-  lastName: string
+  name: string
   phone: string
 }
 
-const newContactBase: Omit<Contact, 'id'> = {
-  firstName: '',
-  lastName: '',
-  phone: '',
-}
-
-// --- Configuración de Firebase ---
-// Leemos la configuración desde las variables de entorno de Vercel
-const appId = import.meta.env.VITE_APP_ID || 'default-app-id'
-const firebaseConfigJSON = import.meta.env.VITE_FIREBASE_CONFIG || '{}'
-
-let app: FirebaseApp
-let auth: Auth
-let db: Firestore
-// Esta ruta DEBE coincidir con tus Reglas de Seguridad de Firestore
-let contactsCollectionPath: string
-
-// --- Estado de la UI ---
-const isLoading = ref(true)
-const isSaving = ref(false)
-const error = ref<string | null>(null)
-const searchTerm = ref('')
-const showModal = ref(false)
-const isEditing = ref(false)
-
-// --- Estado de los Datos ---
-const userId = ref<string | null>(null)
 const contacts = ref<Contact[]>([])
-const currentContact = reactive<Contact>({ id: '', ...newContactBase })
+const isLoading = ref(true)
+const error = ref<string | null>(null)
+const lastLoadedAt = ref<string | null>(null)
 
-// --- Inicialización ---
-onMounted(() => {
-  try {
-    const firebaseConfig = JSON.parse(firebaseConfigJSON)
-    if (!firebaseConfig.apiKey) {
-      throw new Error('VITE_FIREBASE_CONFIG no está configurada en Vercel.')
-    }
-    app = initializeApp(firebaseConfig)
-    auth = getAuth(app)
-    db = getFirestore(app)
-    setLogLevel('debug')
-    contactsCollectionPath = `artifacts/${appId}/public/data/contacts`
+// UI state
+const search = ref('')
+const debouncedSearch = ref('')
+const page = ref(1)
+const perPage = ref(10)
+const sortBy = ref<'id' | 'name' | 'phone'>('name')
+const sortDir = ref<'asc' | 'desc'>('asc')
 
-    // Escuchar cambios de autenticación
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        console.log('Usuario autenticado:', user.uid)
-        userId.value = user.uid
-        // Una vez autenticados, escuchar los contactos
-        setupContactsListener()
-      } else {
-        // Autenticarse anónimamente para poder escribir
-        await authenticate()
-      }
-    })
-  } catch (e: any) {
-    console.error('Error al inicializar Firebase:', e)
-    error.value = `Error al inicializar la base de datos: ${e.message}`
-  }
+// debounce search
+let searchTimer: number | undefined
+watch(search, (v) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  // @ts-ignore - window is available
+  searchTimer = window.setTimeout(() => (debouncedSearch.value = v.trim()), 250)
 })
 
-async function authenticate() {
+// Parse XML -> Contact[]
+function parseContactsXML(xmlText: string): Contact[] {
   try {
-    // En Vercel, solo podemos usar signInAnonymously
-    await signInAnonymously(auth)
-  } catch (e) {
-    console.error('Error de autenticación:', e)
-    error.value = 'Error de autenticación.'
-  }
-}
+    const parser = new DOMParser()
+    const xmlDoc = parser.parseFromString(xmlText, 'application/xml')
 
-// --- Lógica de Datos (Firestore) ---
-function setupContactsListener() {
-  if (!db || !userId.value) return
-
-  isLoading.value = true
-  const q = query(collection(db, contactsCollectionPath))
-
-  // onSnapshot escucha en tiempo real
-  onSnapshot(
-    q,
-    (querySnapshot) => {
-      const liveContacts: Contact[] = []
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        liveContacts.push({
-          id: doc.id,
-          firstName: data.firstName || '',
-          lastName: data.lastName || '',
-          phone: data.phone || '',
-        })
-      })
-      // Ordenar alfabéticamente por nombre
-      contacts.value = liveContacts.sort((a, b) =>
-        a.firstName.localeCompare(b.firstName)
-      )
-      isLoading.value = false
-    },
-    (err) => {
-      console.error('Error escuchando contactos:', err)
-      error.value = 'No se pudieron cargar los contactos.'
-      isLoading.value = false
+    // Detect parser errors
+    const parsererror = xmlDoc.querySelector('parsererror')
+    if (parsererror) {
+      throw new Error('El XML contiene errores de formato.')
     }
-  )
+
+    // Intento flexible de selección (por si las mayúsculas varían)
+    const contactNodes =
+      xmlDoc.querySelectorAll('Contact').length > 0
+        ? xmlDoc.querySelectorAll('Contact')
+        : xmlDoc.querySelectorAll('contact, contacto')
+
+    const parsed: Contact[] = []
+    contactNodes.forEach((node) => {
+      const text = (sel: string) =>
+        node.querySelector(sel)?.textContent?.trim() || ''
+
+      const id =
+        text('id') ||
+        text('ID') ||
+        text('Id') ||
+        Math.random().toString(36).slice(2)
+
+      const firstName = text('FirstName') || text('firstName') || text('Nombre') || ''
+      const lastName = text('LastName') || text('lastName') || text('Apellidos') || ''
+      const phone =
+        text('phonenumber') ||
+        text('PhoneNumber') ||
+        text('Telefono') ||
+        text('phone') ||
+        ''
+
+      const name = `${firstName} ${lastName}`.replace(/\s+/g, ' ').trim() || '—'
+      parsed.push({ id, name, phone })
+    })
+
+    return parsed
+  } catch (e) {
+    console.error('Error parsing XML:', e)
+    throw new Error('No se pudo leer el formato del XML.')
+  }
 }
 
-// --- Lógica de Búsqueda ---
-const filteredContacts = computed(() => {
-  const term = searchTerm.value.toLowerCase()
-  if (!term) {
-    return contacts.value
+async function loadXML() {
+  try {
+    isLoading.value = true
+    error.value = null
+    const response = await fetch('/contactsEUROSUR.xml', { cache: 'no-store' })
+    if (!response.ok) {
+      throw new Error(
+        `Error ${response.status}: No se encontró /public/contactsEUROSUR.xml`
+      )
+    }
+    const xmlText = await response.text()
+    contacts.value = parseContactsXML(xmlText)
+    lastLoadedAt.value = new Date().toLocaleString()
+    // reset controles
+    page.value = 1
+    search.value = ''
+    debouncedSearch.value = ''
+    sortBy.value = 'name'
+    sortDir.value = 'asc'
+  } catch (e: any) {
+    error.value = e.message || 'Error al cargar el XML.'
+  } finally {
+    isLoading.value = false
   }
+}
+
+onMounted(loadXML)
+
+// Derivados: filtrado, orden y paginación
+const filtered = computed(() => {
+  const q = debouncedSearch.value.toLowerCase()
+  if (!q) return contacts.value
   return contacts.value.filter(
     (c) =>
-      c.firstName.toLowerCase().includes(term) ||
-      c.lastName.toLowerCase().includes(term) ||
-      c.phone.toLowerCase().includes(term)
+      c.id.toLowerCase().includes(q) ||
+      c.name.toLowerCase().includes(q) ||
+      c.phone.toLowerCase().includes(q)
   )
 })
 
-// --- Lógica de CRUD (Crear, Editar, Borrar) ---
-function openAddModal() {
-  isEditing.value = false
-  Object.assign(currentContact, { id: '', ...newContactBase })
-  showModal.value = true
-}
+const sorted = computed(() => {
+  const arr = [...filtered.value]
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  const key = sortBy.value
+  return arr.sort((a, b) => {
+    const va = (a[key] || '').toString().toLowerCase()
+    const vb = (b[key] || '').toString().toLowerCase()
+    if (va < vb) return -1 * dir
+    if (va > vb) return 1 * dir
+    return 0
+  })
+})
 
-function openEditModal(contact: Contact) {
-  isEditing.value = true
-  Object.assign(currentContact, contact) // Copia el contacto para editar
-  showModal.value = true
-}
+const total = computed(() => sorted.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
+const pageItems = computed(() => {
+  const start = (page.value - 1) * perPage.value
+  return sorted.value.slice(start, start + perPage.value)
+})
 
-function closeModal() {
-  showModal.value = false
-}
+watch([perPage, total], () => {
+  // si cambia perPage o total, asegura que la página existe
+  page.value = Math.min(page.value, totalPages.value)
+})
 
-async function handleSave() {
-  if (!db || !userId.value || !currentContact.firstName || !currentContact.phone) {
-    error.value = 'Nombre y Teléfono son obligatorios.'
-    return
+// Helpers UI
+function toggleSort(column: 'id' | 'name' | 'phone') {
+  if (sortBy.value === column) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = column
+    sortDir.value = 'asc'
   }
+}
 
-  isSaving.value = true
-  error.value = null
-  const contactData = {
-    firstName: currentContact.firstName,
-    lastName: currentContact.lastName,
-    phone: currentContact.phone,
-  }
-
+async function copyPhone(p: string) {
   try {
-    if (isEditing.value) {
-      // Actualizar un contacto existente
-      const docRef = doc(db, contactsCollectionPath, currentContact.id)
-      await setDoc(docRef, contactData)
-    } else {
-      // Añadir un nuevo contacto
-      const colRef = collection(db, contactsCollectionPath)
-      await addDoc(colRef, contactData)
-    }
-    closeModal()
-  } catch (e: any) {
-    console.error('Error al guardar:', e)
-    error.value = 'No se pudo guardar el contacto.'
-  } finally {
-    isSaving.value = false
+    await navigator.clipboard.writeText(p)
+    // Feedback simple
+    alert('Teléfono copiado')
+  } catch {
+    alert('No se pudo copiar el teléfono')
   }
 }
 
-async function handleDelete(id: string) {
-  if (!db || !userId.value) return
+function downloadCSV() {
+  const headers = ['ID', 'Nombre', 'Teléfono']
+  const rows = sorted.value.map((c) => [c.id, c.name, c.phone])
+  const csv =
+    [headers, ...rows].map((r) =>
+      r
+        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+        .join(',')
+    ).join('\n')
 
-  try {
-    const docRef = doc(db, contactsCollectionPath, id)
-    await deleteDoc(docRef)
-  } catch (e: any) {
-    console.error('Error al borrar:', e)
-    error.value = 'No se pudo borrar el contacto.'
-  }
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'contactos.csv'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 </script>
 
 <template>
   <div class="min-h-dvh bg-slate-50 text-slate-900">
-    <main class="mx-auto max-w-[1800px] px-4 sm:px-8 py-8">
-      <header class="mb-8">
-        <h1 class="text-4xl font-bold text-slate-800 flex items-center gap-3">
-          <BookUser class="h-10 w-10" />
-          Directorio de Contactos
-        </h1>
-        <p class="mt-2 text-sm text-slate-600">
-          Gestiona la agenda de contactos de los terminales telefónicos.
-        </p>
-        <p class="mt-1 text-xs text-slate-500 font-mono">
-          URL para teléfonos:
-          <code class="bg-slate-200 p-1 rounded">/api/phonebook.xml</code>
-        </p>
+    <main class="mx-auto max-w-[1200px] px-4 sm:px-6 py-8">
+      <!-- Header -->
+      <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 class="text-3xl font-bold text-slate-900">Directorio de Contactos</h1>
+          <p class="mt-1 text-sm text-slate-600">
+            {{ total }} contacto{{ total === 1 ? '' : 's' }}
+            <span v-if="lastLoadedAt" class="text-slate-400">• Última carga: {{ lastLoadedAt }}</span>
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="loadXML"
+            class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 active:scale-[0.99]"
+          >
+            <span class="i-lucide-refresh-cw" aria-hidden="true"></span>
+            Recargar
+          </button>
+          <button
+            @click="downloadCSV"
+            class="inline-flex items-center gap-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-sm hover:opacity-95 active:scale-[0.99]"
+          >
+            <span class="i-lucide-download" aria-hidden="true"></span>
+            Exportar CSV
+          </button>
+        </div>
       </header>
 
-      <!-- Barra de Acciones -->
-      <section class="mb-6 flex flex-col sm:flex-row gap-4">
-        <!-- Buscador -->
-        <div class="relative flex-grow">
+      <!-- Toolbar -->
+      <div class="mb-4 grid gap-3 sm:grid-cols-3">
+        <label class="col-span-2">
+          <span class="mb-1 block text-xs font-medium text-slate-600">Buscar</span>
           <input
-            v-model="searchTerm"
-            type="text"
-            placeholder="Buscar por nombre, apellido o teléfono..."
-            class="w-full rounded-lg border border-slate-300 px-4 py-2 pl-10 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+            v-model="search"
+            type="search"
+            placeholder="Buscar por ID, nombre o teléfono…"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-300"
+            aria-label="Buscar contactos"
           />
-          <Search
-            class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400"
-          />
-        </div>
-        <!-- Botón Añadir -->
-        <button
-          @click="openAddModal"
-          class="flex-shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-base font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          <Plus class="h-5 w-5" />
-          Añadir Contacto
-        </button>
-      </section>
+        </label>
 
-      <!-- Mensaje de Carga o Error -->
-      <div
-        v-if="isLoading && !error"
-        class="flex justify-center items-center gap-2 py-10 text-slate-500"
-      >
-        <Loader2 class="h-6 w-6 animate-spin" />
-        <span>Cargando contactos...</span>
-      </div>
-      <div
-        v-if="error"
-        class="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-3 text-sm border border-red-200"
-      >
-        <strong>Error:</strong> {{ error }}
-      </div>
-
-      <!-- Tabla de Contactos -->
-      <section
-        v-if="!isLoading"
-        class="rounded-2xl border border-slate-200/80 bg-white shadow-sm"
-      >
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-slate-200">
-            <thead class="bg-slate-50">
-              <tr>
-                <th
-                  class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500"
-                >
-                  Nombre
-                </th>
-                <th
-                  class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500"
-                >
-                  Apellido
-                </th>
-                <th
-                  class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500"
-                >
-                  Teléfono
-                </th>
-                <th
-                  class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500"
-                >
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200 bg-white">
-              <tr v-if="filteredContacts.length === 0">
-                <td colspan="4" class="px-6 py-4 text-center text-slate-500">
-                  {{ searchTerm ? 'No se encontraron contactos' : 'No hay contactos. Añade el primero.' }}
-                </td>
-              </tr>
-              <tr
-                v-for="contact in filteredContacts"
-                :key="contact.id"
-                class="hover:bg-slate-50"
-              >
-                <td
-                  class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900"
-                >
-                  {{ contact.firstName }}
-                </td>
-                <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
-                  {{ contact.lastName }}
-                </td>
-                <td
-                  class="whitespace-nowrap px-6 py-4 text-sm text-slate-600 font-mono"
-                >
-                  {{ contact.phone }}
-                </td>
-                <td
-                  class="whitespace-nowrap px-6 py-4 text-sm font-medium text-right space-x-2"
-                >
-                  <button
-                    @click="openEditModal(contact)"
-                    class="p-1 text-blue-600 hover:text-blue-800"
-                    title="Editar"
-                  >
-                    <Edit class="h-5 w-5" />
-                  </button>
-                  <button
-                    @click="handleDelete(contact.id)"
-                    class="p-1 text-red-600 hover:text-red-800"
-                    title="Borrar"
-                  >
-                    <Trash2 class="h-5 w-5" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </main>
-
-    <!-- Modal para Añadir/Editar Contacto -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      @click.self="closeModal"
-    >
-      <div
-        class="m-4 w-full max-w-lg rounded-2xl bg-white shadow-2xl transition-all"
-      >
-        <header
-          class="flex items-center justify-between border-b border-slate-200 p-4"
-        >
-          <h2 class="text-xl font-semibold text-slate-800">
-            {{ isEditing ? 'Editar Contacto' : 'Añadir Contacto' }}
-          </h2>
-          <button
-            @click="closeModal"
-            class="rounded-full p-1 text-slate-400 hover:bg-slate-100"
+        <label class="col-span-1">
+          <span class="mb-1 block text-xs font-medium text-slate-600">Elementos por página</span>
+          <select
+            v-model.number="perPage"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-300"
+            aria-label="Elementos por página"
           >
-            <X class="h-6 w-6" />
-          </button>
-        </header>
+            <option :value="5">5</option>
+            <option :value="10">10</option>
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+          </select>
+        </label>
+      </div>
 
-        <!-- Formulario -->
-        <form @submit.prevent="handleSave">
-          <div class="space-y-4 p-6">
-            <div>
-              <label
-                for="firstName"
-                class="block text-sm font-medium text-slate-700"
-                >Nombre</label
+      <!-- Estados -->
+      <div v-if="isLoading" class="rounded-2xl border border-slate-200 bg-white p-6">
+        <div class="grid gap-3">
+          <div class="h-4 w-1/3 animate-pulse rounded bg-slate-200"></div>
+          <div class="h-4 w-1/2 animate-pulse rounded bg-slate-200"></div>
+          <div class="h-40 animate-pulse rounded bg-slate-100"></div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="error"
+        class="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800"
+        role="alert"
+      >
+        <p class="font-semibold">No se pudieron cargar los contactos.</p>
+        <p class="text-sm mt-1">{{ error }}</p>
+        <button
+          @click="loadXML"
+          class="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm hover:bg-red-100"
+        >
+          Reintentar
+        </button>
+      </div>
+
+      <!-- Lista -->
+      <section v-else>
+        <!-- Móvil: tarjetas -->
+        <div class="grid gap-3 sm:hidden">
+          <div
+            v-for="c in pageItems"
+            :key="c.id"
+            class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs uppercase tracking-wide text-slate-500">ID</p>
+                <p class="font-mono text-sm text-slate-700">{{ c.id }}</p>
+              </div>
+              <button
+                v-if="c.phone"
+                @click="copyPhone(c.phone)"
+                class="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
               >
-              <input
-                v-model="currentContact.firstName"
-                id="firstName"
-                type="text"
-                required
-                class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+                Copiar teléfono
+              </button>
             </div>
-            <div>
-              <label
-                for="lastName"
-                class="block text-sm font-medium text-slate-700"
-                >Apellido</label
-              >
-              <input
-                v-model="currentContact.lastName"
-                id="lastName"
-                type="text"
-                class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+            <div class="mt-3">
+              <p class="text-xs uppercase tracking-wide text-slate-500">Nombre</p>
+              <p class="text-base font-medium text-slate-900">{{ c.name }}</p>
             </div>
-            <div>
-              <label
-                for="phone"
-                class="block text-sm font-medium text-slate-700"
-                >Teléfono</label
-              >
-              <input
-                v-model="currentContact.phone"
-                id="phone"
-                type="tel"
-                required
-                class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+            <div class="mt-3">
+              <p class="text-xs uppercase tracking-wide text-slate-500">Teléfono</p>
+              <p class="font-mono text-sm text-slate-700">{{ c.phone || '—' }}</p>
             </div>
           </div>
+        </div>
 
-          <!-- Pie del Modal -->
-          <footer
-            class="flex justify-end gap-3 rounded-b-2xl bg-slate-50 p-4"
+        <!-- Escritorio: tabla -->
+        <div class="hidden sm:block rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200">
+              <thead class="bg-slate-50 sticky top-0 z-10">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    <button
+                      class="inline-flex items-center gap-1 hover:underline"
+                      @click="toggleSort('id')"
+                      aria-label="Ordenar por ID"
+                    >
+                      ID
+                      <span v-if="sortBy === 'id'">({{ sortDir === 'asc' ? '↑' : '↓' }})</span>
+                    </button>
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    <button
+                      class="inline-flex items-center gap-1 hover:underline"
+                      @click="toggleSort('name')"
+                      aria-label="Ordenar por nombre"
+                    >
+                      Nombre
+                      <span v-if="sortBy === 'name'">({{ sortDir === 'asc' ? '↑' : '↓' }})</span>
+                    </button>
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    <button
+                      class="inline-flex items-center gap-1 hover:underline"
+                      @click="toggleSort('phone')"
+                      aria-label="Ordenar por teléfono"
+                    >
+                      Teléfono
+                      <span v-if="sortBy === 'phone'">({{ sortDir === 'asc' ? '↑' : '↓' }})</span>
+                    </button>
+                  </th>
+                  <th class="px-6 py-3"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200 bg-white">
+                <tr v-if="sorted.length === 0">
+                  <td colspan="4" class="px-6 py-10 text-center text-slate-500">
+                    No hay resultados para “{{ debouncedSearch }}”.
+                  </td>
+                </tr>
+
+                <tr v-for="c in pageItems" :key="c.id" class="hover:bg-slate-50">
+                  <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600 font-mono">{{ c.id }}</td>
+                  <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ c.name }}</td>
+                  <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-700 font-mono">{{ c.phone || '—' }}</td>
+                  <td class="px-6 py-4">
+                    <div class="flex justify-end">
+                      <button
+                        v-if="c.phone"
+                        @click="copyPhone(c.phone)"
+                        class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Paginación -->
+        <nav class="mt-4 flex items-center justify-between gap-3">
+          <button
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-40"
+            :disabled="page <= 1"
+            @click="page = Math.max(1, page - 1)"
           >
-            <button
-              type="button"
-              @click="closeModal"
-              class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              :disabled="isSaving"
-              class="inline-flex items-center justify-center gap-2 rounded-lg border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-            >
-              <Loader2 v-if="isSaving" class="h-4 w-4 animate-spin" />
-              <Save v-else class="h-4 w-4" />
-              {{ isSaving ? 'Guardando...' : 'Guardar Cambios' }}
-            </button>
-          </footer>
-        </form>
-      </div>
-    </div>
+            Anterior
+          </button>
+          <p class="text-sm text-slate-600">
+            Página {{ page }} de {{ totalPages }}
+          </p>
+          <button
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-40"
+            :disabled="page >= totalPages"
+            @click="page = Math.min(totalPages, page + 1)"
+          >
+            Siguiente
+          </button>
+        </nav>
+      </section>
+    </main>
   </div>
 </template>
-
