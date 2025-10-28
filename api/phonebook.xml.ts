@@ -2,7 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   getAuth,
-  signInWithCustomToken,
   signInAnonymously,
   type Auth,
 } from 'firebase/auth'
@@ -16,24 +15,27 @@ import {
 } from 'firebase/firestore'
 
 // --- Configuración de Firebase ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'
-const firebaseConfigJSON =
-  typeof __firebase_config !== 'undefined'
-    ? __firebase_config
-    : '{}'
-const firebaseConfig = JSON.parse(firebaseConfigJSON)
+// Leemos la configuración desde las variables de entorno de Vercel
+// OJO: en las API de Vercel (Node.js) se usa process.env, no import.meta.env
+const appId = process.env.VITE_APP_ID || 'default-app-id'
+const firebaseConfigJSON = process.env.VITE_FIREBASE_CONFIG || '{}'
+
 let app: FirebaseApp
 let auth: Auth
 let db: Firestore
-// Esta ruta DEBE coincidir con la de pages/Contacts.vue
+// Esta ruta DEBE coincidir con la de pages/Contacts.vue y las Reglas de Seguridad
 const contactsCollectionPath = `artifacts/${appId}/public/data/contacts`
 
 // Inicializar Firebase (una sola vez)
 try {
+  const firebaseConfig = JSON.parse(firebaseConfigJSON)
+  if (!firebaseConfig.apiKey) {
+    console.error('VITE_FIREBASE_CONFIG no está configurada en Vercel.')
+  }
   app = initializeApp(firebaseConfig)
   auth = getAuth(app)
   db = getFirestore(app)
-  setLogLevel('Debug')
+  setLogLevel('debug')
 } catch (e) {
   console.error('Error al inicializar Firebase en API:', e)
 }
@@ -59,7 +61,7 @@ async function generateContactsXML(): Promise<string> {
   xml += '<AddressBook>\n'
   xml += '  <version>1</version>\n'
 
-  // Añadir grupos por defecto (basado en tu imagen original)
+  // Añadir grupos por defecto
   xml += '  <pbgroup>\n'
   xml += '    <id>0</id>\n'
   xml += '    <name>Default</name>\n'
@@ -82,7 +84,7 @@ async function generateContactsXML(): Promise<string> {
 
     querySnapshot.forEach((doc) => {
       const contact = doc.data()
-      // Usamos el ID de Firestore (ej. "abc123xyz") como el ID del contacto
+      // Usamos el ID de Firestore como el ID del contacto
       const id = doc.id
       const firstName = contact.firstName || ''
       const lastName = contact.lastName || ''
@@ -90,6 +92,10 @@ async function generateContactsXML(): Promise<string> {
 
       // Formatear el contacto como en tu XML original
       xml += '  <Contact>\n'
+      // ATENCIÓN: El XML original usaba un ID numérico (1, 2, 3...).
+      // Aquí usamos el ID alfanumérico de Firebase (ej: "aB3xY...").
+      // Esto es más robusto. Si los teléfonos REQUIEREN un ID numérico,
+      // tendríamos que añadir un campo "index" a la base de datos.
       xml += `    <id>${id}</id>\n`
       xml += `    <FirstName>${firstName}</FirstName>\n`
       xml += `    <LastName>${lastName}</LastName>\n`
@@ -127,7 +133,7 @@ export default async function handler(
         .status(500)
         .json({ error: 'No se pudo autenticar el servidor.' })
     }
-
+    
     // Generar el XML
     const xmlData = await generateContactsXML()
 
