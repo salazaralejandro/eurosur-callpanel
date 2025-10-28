@@ -4,7 +4,6 @@ import { initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   getAuth,
   signInAnonymously,
-  signInWithCustomToken,
   onAuthStateChanged,
   type Auth,
 } from 'firebase/auth'
@@ -31,12 +30,6 @@ import {
   BookUser,
 } from 'lucide-vue-next'
 
-// --- Declaraciones para el compilador de Vercel ---
-// Le decimos a TypeScript que estas variables globales existirán en el entorno de ejecución
-declare const __app_id: string | undefined
-declare const __firebase_config: string | undefined
-declare const __initial_auth_token: string | undefined
-
 // --- Tipos de Datos ---
 type Contact = {
   id: string
@@ -52,13 +45,14 @@ const newContactBase: Omit<Contact, 'id'> = {
 }
 
 // --- Configuración de Firebase ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'
-const firebaseConfigJSON =
-  typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'
+// Leemos la configuración desde las variables de entorno de Vercel
+const appId = import.meta.env.VITE_APP_ID || 'default-app-id'
+const firebaseConfigJSON = import.meta.env.VITE_FIREBASE_CONFIG || '{}'
 
 let app: FirebaseApp
 let auth: Auth
 let db: Firestore
+// Esta ruta DEBE coincidir con tus Reglas de Seguridad de Firestore
 let contactsCollectionPath: string
 
 // --- Estado de la UI ---
@@ -78,10 +72,13 @@ const currentContact = reactive<Contact>({ id: '', ...newContactBase })
 onMounted(() => {
   try {
     const firebaseConfig = JSON.parse(firebaseConfigJSON)
+    if (!firebaseConfig.apiKey) {
+      throw new Error('VITE_FIREBASE_CONFIG no está configurada en Vercel.')
+    }
     app = initializeApp(firebaseConfig)
     auth = getAuth(app)
     db = getFirestore(app)
-    setLogLevel('debug') // <-- CORREGIDO: 'Debug' a 'debug'
+    setLogLevel('debug')
     contactsCollectionPath = `artifacts/${appId}/public/data/contacts`
 
     // Escuchar cambios de autenticación
@@ -92,23 +89,20 @@ onMounted(() => {
         // Una vez autenticados, escuchar los contactos
         setupContactsListener()
       } else {
-        // Si no hay usuario, autenticarse
+        // Autenticarse anónimamente para poder escribir
         await authenticate()
       }
     })
   } catch (e: any) {
     console.error('Error al inicializar Firebase:', e)
-    error.value = 'Error al inicializar la base de datos.'
+    error.value = `Error al inicializar la base de datos: ${e.message}`
   }
 })
 
 async function authenticate() {
   try {
-    if (typeof __initial_auth_token !== 'undefined') {
-      await signInWithCustomToken(auth, __initial_auth_token)
-    } else {
-      await signInAnonymously(auth)
-    }
+    // En Vercel, solo podemos usar signInAnonymously
+    await signInAnonymously(auth)
   } catch (e) {
     console.error('Error de autenticación:', e)
     error.value = 'Error de autenticación.'
@@ -215,8 +209,6 @@ async function handleSave() {
 }
 
 async function handleDelete(id: string) {
-  // En una app real, pediríamos confirmación.
-  // Por simplicidad, borramos directamente.
   if (!db || !userId.value) return
 
   try {
@@ -425,7 +417,7 @@ async function handleDelete(id: string) {
                 >Teléfono</label
               >
               <input
-                vD-model="currentContact.phone"
+                v-model="currentContact.phone"
                 id="phone"
                 type="tel"
                 required
